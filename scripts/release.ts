@@ -10,7 +10,7 @@
  * Requires the updater private key in ~/.tauri/diskmaster.key (or
  * TAURI_SIGNING_PRIVATE_KEY) and an authenticated `gh` CLI.
  */
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   copyFileSync,
@@ -174,15 +174,34 @@ const assets = [
   latestPath,
   sumsPath,
   artifacts.portable,
-]
-  .map((file) => `'${file}'`)
-  .join(" ");
+];
 
-const flags = [draft ? "--draft" : "", prerelease ? "--prerelease" : ""].filter(Boolean).join(" ");
+const flags = [draft ? "--draft" : "", prerelease ? "--prerelease" : ""].filter(Boolean);
 if (!dryRun) {
-  run(
-    `gh release create ${tag} ${flags} --repo ${repo} --title "Диск-Мастер ${version}" --notes ${JSON.stringify(notes)} ${assets}`,
+  const notesPath = path.join(outputDir, "RELEASE_NOTES.md");
+  writeFileSync(notesPath, notes, "utf8");
+
+  const result = spawnSync(
+    "gh",
+    [
+      "release",
+      "create",
+      tag,
+      ...flags,
+      "--repo",
+      repo,
+      "--title",
+      `Диск-Мастер ${version}`,
+      "--notes-file",
+      notesPath,
+      ...Array.from(new Set(assets)),
+    ],
+    { stdio: "inherit", cwd: root },
   );
+
+  if (result.status !== 0) {
+    throw new Error(`gh release create failed with code ${result.status}`);
+  }
 } else {
   console.log("\n[release] dry run: артефакты собраны, релиз не опубликован");
 }
