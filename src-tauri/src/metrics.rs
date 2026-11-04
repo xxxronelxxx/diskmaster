@@ -263,6 +263,18 @@ pub fn cleanup_legacy_samplers() -> usize {
         return 0;
     }
 
+    // Fresh installations never had a PowerShell sampler. Only run the
+    // one-time migration when data from an old build is present.
+    let legacy = crate::paths::local_appdata().join("DiskMaster");
+    let has_legacy = ["history", "schedule", "widget"]
+        .iter()
+        .any(|name| legacy.join(name).exists());
+    if !has_legacy {
+        crate::paths::ensure_parent(&marker);
+        let _ = std::fs::write(&marker, b"done");
+        return 0;
+    }
+
     let script = r#"
 $killed = 0
 $procs = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'powershell.exe' -and $_.CommandLine -like '*-EncodedCommand*' }
