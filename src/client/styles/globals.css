@@ -1,0 +1,143 @@
+@import "tailwindcss";
+
+/*
+ * Colour model
+ * ------------
+ * Tailwind v4 emits every utility as `var(--color-<name>)`, so a second theme
+ * is a set of variable overrides rather than a rewrite of the components.
+ *
+ * The app was designed dark-first, which means the same classes must convey the
+ * same *meaning* in both themes:
+ *   - slate-*   text: 50 = brightest (dark theme) -> darkest (light theme)
+ *   - white/N   surfaces: a light wash on black -> a dark tint on white
+ *   - border-*  hairlines in both
+ * Both palettes are therefore rotated 180°: the light theme maps slate-50 to
+ * near-black and white/5% to black/5%.
+ */
+@custom-variant light (&:where([data-theme="light"], [data-theme="light"] *));
+
+:root {
+  color-scheme: dark;
+  --app-bg: #070b12;
+  --app-shell: rgba(7, 11, 18, 0.85);
+  --app-menu: #101725;
+  --app-glow: rgba(16, 185, 129, 0.10);
+  --preview-from: #1e3a5f;
+  --preview-to: #0a1120;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --app-bg: #f5f7fb;
+  --app-shell: rgba(255, 255, 255, 0.88);
+  --app-menu: #ffffff;
+  --app-glow: rgba(16, 185, 129, 0.07);
+  --preview-from: #cfe4f5;
+  --preview-to: #eef3fa;
+
+  /* Text: rotated slate ramp keeps contrast in the same places. */
+  --color-white: #0b111e;
+  --color-slate-50: #060b16;
+  --color-slate-100: #101827;
+  --color-slate-200: #1d2635;
+  --color-slate-300: #33404f;
+  --color-slate-400: #46536a;
+  --color-slate-500: #55637a;
+  --color-slate-600: #5d6a7e;
+  --color-slate-700: #8593a8;
+  --color-slate-800: #b3bfcf;
+  --color-slate-900: #d6dde7;
+  --color-slate-950: #e8edf4;
+
+  /*
+   * Accent text ramps: the components use `text-emerald-200` style classes for
+   * coloured labels on tinted chips. Those tones are near-white by design, so
+   * in the light theme they must become deep, saturated shades instead.
+   */
+  --color-emerald-100: #064e3b;
+  --color-emerald-200: #065f46;
+  --color-emerald-300: #036349;
+  --color-teal-200: #115e59;
+  --color-amber-100: #78350f;
+  --color-amber-200: #92400e;
+  --color-amber-300: #b45309;
+  --color-rose-100: #7f1d1d;
+  --color-rose-200: #991b1b;
+  --color-rose-300: #b91c1c;
+  --color-sky-100: #0c4a6e;
+  --color-sky-200: #075985;
+  --color-sky-300: #0369a1;
+  --color-violet-100: #4c1d95;
+  --color-violet-200: #5b21b6;
+  --color-violet-300: #6d28d9;
+  --color-fuchsia-200: #86198f;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--app-bg);
+  font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background-color 160ms ease;
+}
+
+::selection {
+  background-color: rgba(16, 185, 129, 0.3);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.22);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.35);
+  background-clip: content-box;
+}
+
+:root[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.3);
+  background-clip: content-box;
+}
+
+input[type="checkbox"] {
+  cursor: pointer;
+}
+
+input[type="range"] {
+  accent-color: #10b981;
+}
+
+/* Light theme: gradients built from the accent look washed out on white. */
+:root[data-theme="light"] .bg-gradient-to-br.from-emerald-400.to-teal-500 {
+  color: #04231a;
+}
+
+/* Log / code blocks used a dark translucent panel; invert to a soft tint. */
+:root[data-theme="light"] .bg-black\/40,
+:root[data-theme="light"] .bg-black\/30 {
+  background-color: rgba(15, 23, 42, 0.05);
+}
+
+:root[data-theme="light"] .shadow-2xl,
+:root[data-theme="light"] .shadow-xl {
+  box-shadow: 0 18px 40px -24px rgba(15, 23, 42, 0.35);
+}

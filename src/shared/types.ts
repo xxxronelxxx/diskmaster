@@ -1,0 +1,324 @@
+/**
+ * Shared data contract between the React UI and the Rust backend.
+ *
+ * The Rust structs use `#[serde(rename_all = "camelCase")]`, so every field
+ * here must stay in sync with `src-tauri/src/types.rs`.
+ */
+
+/* --------------------------------- system --------------------------------- */
+
+export type DriveInfo = {
+  letter: string;
+  label: string;
+  fileSystem: string;
+  total: number;
+  free: number;
+  used: number;
+};
+
+export type SystemInfo = {
+  machine: string;
+  user: string;
+  os: string;
+  build: string;
+  version: string;
+  lastBoot: string | null;
+  cpu: string;
+  cores: number;
+  threads: number;
+  ramTotal: number;
+  ramFree: number;
+  admin: boolean;
+  drives: DriveInfo[];
+};
+
+/* --------------------------------- metrics -------------------------------- */
+
+export type MetricsSample = {
+  t: number;
+  cpu: number;
+  cores: number[];
+  ramUsed: number;
+  ramTotal: number;
+  diskRead: number;
+  diskWrite: number;
+  netIn: number;
+  netOut: number;
+  netAdapter: string | null;
+};
+
+export type MetricsState = {
+  history: MetricsSample[];
+  latest: MetricsSample | null;
+  intervalMs: number;
+  error?: string;
+};
+
+export type ProcessInfo = {
+  pid: number;
+  name: string;
+  memory: number;
+  cpuSeconds: number;
+  path: string | null;
+};
+
+/* ---------------------------------- scan ---------------------------------- */
+
+export type Risk = "safe" | "caution";
+export type CategoryKind = "contents" | "files" | "recycle-bin";
+export type CategoryStatus = "pending" | "scanning" | "done" | "partial" | "error";
+
+export type ScanCategoryResult = {
+  id: string;
+  name: string;
+  description: string;
+  paths: string[];
+  kind: CategoryKind;
+  risk: Risk;
+  needsAdmin: boolean;
+  note?: string;
+  bytes: number;
+  files: number;
+  status: CategoryStatus;
+  error?: string;
+};
+
+export type LargeFile = {
+  path: string;
+  name: string;
+  dir: string;
+  size: number;
+  modified: number;
+};
+
+export type ScanPhase = "starting" | "junk" | "large-files" | "done" | "error";
+
+export type ScanState = {
+  jobId: string;
+  startedAt: number;
+  finishedAt: number | null;
+  phase: ScanPhase;
+  percent: number;
+  scanPath: string;
+  filesScanned: number;
+  bytesScanned: number;
+  categories: ScanCategoryResult[];
+  largeFiles: LargeFile[];
+  largeFilesTruncated: boolean;
+  largeFileThreshold: number;
+  totalJunkBytes: number;
+  totalJunkFiles: number;
+  error?: string;
+};
+
+export type CleanCategoryResult = {
+  id: string;
+  name: string;
+  bytes: number;
+  files: number;
+  errors: string[];
+};
+
+export type CleanResult = {
+  freedBytes: number;
+  deletedFiles: number;
+  categories: CleanCategoryResult[];
+  errors: string[];
+};
+
+export type RecycleResult = {
+  removed: number;
+  bytes: number;
+  errors: string[];
+};
+
+/* -------------------------------- folders --------------------------------- */
+
+export type FolderEntry = {
+  path: string;
+  name: string;
+  isDir: boolean;
+  size: number;
+  files: number;
+  modified: number;
+  children: number;
+};
+
+export type FolderAnalysis = {
+  path: string;
+  name: string;
+  size: number;
+  files: number;
+  entries: FolderEntry[];
+  parent: string | null;
+  elapsedMs: number;
+  truncated: boolean;
+  error?: string;
+};
+
+export type DeleteResult = {
+  ok: boolean;
+  bytes: number;
+  files: number;
+  errors: string[];
+};
+
+/* ------------------------------- duplicates ------------------------------- */
+
+export type DuplicateFile = {
+  path: string;
+  name: string;
+  dir: string;
+  size: number;
+  modified: number;
+};
+
+export type DuplicateGroup = {
+  hash: string;
+  size: number;
+  count: number;
+  wasted: number;
+  files: DuplicateFile[];
+};
+
+export type DuplicateScan = {
+  id: string;
+  root: string;
+  minSize: number;
+  scannedFiles: number;
+  candidateFiles: number;
+  groups: DuplicateGroup[];
+  elapsedMs: number;
+  truncated: boolean;
+  error?: string;
+};
+
+/* -------------------------------- programs -------------------------------- */
+
+export type InstalledProgram = {
+  key: string;
+  name: string;
+  version: string | null;
+  publisher: string | null;
+  installDate: string | null;
+  sizeBytes: number;
+  location: string | null;
+  uninstallString: string | null;
+  quietUninstallString: string | null;
+  noRemove: boolean;
+  displayIcon?: string | null;
+};
+
+export type UninstallResult = {
+  launched: boolean;
+  command?: string;
+  error?: string;
+};
+
+/* --------------------------------- winget --------------------------------- */
+
+export type WingetUpdate = {
+  name: string;
+  id: string;
+  current: string;
+  available: string;
+  source: string;
+};
+
+export type WingetListing = {
+  available: boolean;
+  updates: WingetUpdate[];
+  error?: string;
+  raw?: string;
+  refreshedAt: number;
+};
+
+/* -------------------------------- startup --------------------------------- */
+
+export type StartupItem = {
+  id: string;
+  name: string;
+  command: string;
+  location: string;
+  source: "registry" | "startup-folder" | "task";
+  enabled: boolean;
+  publisher: string | null;
+  executable: string | null;
+  exists: boolean;
+  system: boolean;
+};
+
+/* ------------------------------- schedule --------------------------------- */
+
+export type ScheduleFrequency = "daily" | "weekly" | "monthly" | "logon";
+
+export type ScheduleConfig = {
+  enabled: boolean;
+  frequency: ScheduleFrequency;
+  time: string;
+  dayOfWeek: number;
+  categories: string[];
+  thresholdMb: number;
+  lastRunAt: number | null;
+  lastFreedBytes: number | null;
+};
+
+export type ScheduleRun = {
+  at: number;
+  freedBytes: number;
+  files: number;
+  categories: string[];
+  trigger: "manual" | "scheduled";
+};
+
+export type ScheduleStatus = {
+  config: ScheduleConfig;
+  registered: boolean;
+  nextRun: string | null;
+};
+
+/* -------------------------------- history --------------------------------- */
+
+export type DriveSnapshot = {
+  t: number;
+  drives: { letter: string; used: number; free: number; total: number }[];
+};
+
+export type HistorySummary = {
+  points: DriveSnapshot[];
+  letters: string[];
+  growthPerDay: number;
+  firstAt: number | null;
+};
+
+/* --------------------------------- widget --------------------------------- */
+
+export type WidgetSettings = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  opacity: number;
+  accent: string;
+  radius: number;
+  fontScale: number;
+  showCpu: boolean;
+  showRam: boolean;
+  showDisk: boolean;
+  showNet: boolean;
+  showDrives: boolean;
+  showTopProcess: boolean;
+  bars: boolean;
+  zMode: "normal" | "top" | "desktop";
+  clickThrough: boolean;
+  intervalMs: number;
+  showTitle: boolean;
+  title: string;
+};
+
+export type WidgetStatus = {
+  running: boolean;
+  autostart: boolean;
+  settings: WidgetSettings;
+  log: string | null;
+};

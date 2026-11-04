@@ -1,0 +1,45 @@
+{
+  "name": "disk-master",
+  "private": true,
+  "version": "1.1.1",
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "dev:web": "vite",
+    "build:web": "vite build",
+    "build:portable": "tsx scripts/build-portable.ts",
+    "build:installer": "tauri build",
+    "release": "tsx scripts/release.ts",
+    "version:sync": "tsx scripts/sync-version.ts",
+    "check:types": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "icons": "tsx scripts/make-icons.ts"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.85.5",
+    "@tauri-apps/api": "^2.9.0",
+    "@tauri-apps/plugin-process": "^2.3.0",
+    "@tauri-apps/plugin-updater": "^2.9.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9",
+    "@tailwindcss/vite": "^4.1.18",
+    "@tauri-apps/cli": "^2.9.5",
+    "@types/node": "22.19.2",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^5.0.1",
+    "eslint": "^9",
+    "eslint-plugin-react-hooks": "^7",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "globals": "^16.3.0",
+    "tailwindcss": "^4.1.18",
+    "tsx": "^4.20.0",
+    "typescript": "^5",
+    "typescript-eslint": "^8.40.0",
+    "vite": "^7.1.3"
+  }
+}
