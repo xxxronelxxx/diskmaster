@@ -7,6 +7,25 @@
 нативный Rust, интерфейс рендерится системным **WebView2**. Итог: ~10 МБ вместо ~120 МБ,
 старт ~0,25 с, нет локального HTTP-сервера.
 
+## Скачать
+
+Готовые сборки публикуются на странице релизов:
+
+**https://github.com/xxxronelxxx/diskmaster/releases/latest**
+
+| Что скачать | Файл |
+|---|---|
+| Установщик (рекомендуется) | `DiskMaster_<версия>_x64-setup.exe` — выбор папки, без прав администратора, автообновление |
+| Портативная версия | `DiskMaster-portable-<версия>.zip` — распаковать и запустить `DiskMaster.exe`, установка не нужна |
+
+Прямые ссылки на последнюю версию (всегда указывают на актуальную сборку):
+
+- Установщик: https://github.com/xxxronelxxx/diskmaster/releases/latest/download/DiskMaster-setup.exe
+- Портативная: https://github.com/xxxronelxxx/diskmaster/releases/latest/download/DiskMaster-portable.zip
+
+Требуется **Windows 11**. При первом запуске SmartScreen может показать «Неизвестный издатель»:
+нажмите «Подробнее» → «Выполнить в любом случае».
+
 ## Требования
 
 - Windows 11 (WebView2 входит в систему)

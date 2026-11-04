@@ -127,6 +127,12 @@ const artifacts = {
   portable: portableZip,
 };
 
+// Stable aliases so README links never depend on the version number.
+const stableSetup = path.join(outputDir, "DiskMaster-setup.exe");
+const stablePortable = path.join(outputDir, "DiskMaster-portable.zip");
+copyFileSync(artifacts.setup, stableSetup);
+copyFileSync(artifacts.portable, stablePortable);
+
 const latest = {
   version,
   notes: "См. описание релиза",
@@ -179,6 +185,8 @@ const assets = [
   latestPath,
   sumsPath,
   artifacts.portable,
+  stableSetup,
+  stablePortable,
 ];
 
 const flags = [draft ? "--draft" : "", prerelease ? "--prerelease" : ""].filter(Boolean);
