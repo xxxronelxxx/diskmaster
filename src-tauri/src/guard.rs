@@ -64,7 +64,6 @@ pub fn check_path(path: &Path) -> Result<PathBuf, String> {
 #[derive(Default)]
 pub struct AllowList {
     paths: HashSet<String>,
-    roots: HashSet<String>,
     updated_at: i64,
 }
 
@@ -86,14 +85,8 @@ impl AllowList {
         self.touch();
     }
 
-    pub fn register_root(&mut self, path: &Path) {
-        self.roots.insert(normalize(path));
-        self.touch();
-    }
-
     pub fn clear(&mut self) {
         self.paths.clear();
-        self.roots.clear();
         self.touch();
     }
 
@@ -101,18 +94,11 @@ impl AllowList {
         self.updated_at = chrono::Utc::now().timestamp_millis();
     }
 
+    /// Only the exact paths returned by a scan/analysis are deletable. A
+    /// previously registered parent directory does not implicitly allow every
+    /// descendant.
     pub fn allows(&self, path: &Path) -> bool {
-        let normalized = normalize(path);
-        if self.paths.contains(&normalized) || self.roots.contains(&normalized) {
-            return true;
-        }
-        self.roots
-            .iter()
-            .any(|root| normalized.starts_with(&format!("{root}\\")))
-            || self
-                .paths
-                .iter()
-                .any(|known| normalized.starts_with(&format!("{known}\\")))
+        self.paths.contains(&normalize(path))
     }
 
     /// The allow-list is rebuilt on every scan; it is pointless after a long
@@ -157,7 +143,7 @@ mod tests {
         allow.register(&allowed);
         assert!(allow.allows(&allowed));
         assert!(!allow.allows(&other));
-        assert!(allow.allows(&allowed.join("child.txt")));
+        assert!(!allow.allows(&allowed.join("child.txt")));
     }
 
     #[test]

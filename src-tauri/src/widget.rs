@@ -6,7 +6,7 @@ use std::time::Duration;
 use winreg::enums::{HKEY_CURRENT_USER, KEY_READ, KEY_WRITE};
 use winreg::RegKey;
 
-use crate::paths::storage_path;
+use crate::paths::{self, storage_path};
 use crate::ps;
 use crate::state::{AppState, WidgetRuntime};
 use crate::types::{WidgetSettings, WidgetStatus};
@@ -51,7 +51,41 @@ pub fn read_settings() -> WidgetSettings {
         }
     }
 
-    serde_json::from_value(value).unwrap_or_default()
+    clamp_settings(serde_json::from_value(value).unwrap_or_default())
+}
+
+fn valid_accent(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    value.len() == 7
+        && bytes[0] == b'#'
+        && bytes[1..].iter().all(|byte| byte.is_ascii_hexdigit())
+}
+
+/// Values arrive from the UI as JSON, so they are clamped before they reach the
+/// WPF script. A bad width or opacity would otherwise break the widget window.
+fn clamp_settings(mut settings: WidgetSettings) -> WidgetSettings {
+    settings.width = settings.width.clamp(200, 1200);
+    settings.height = settings.height.clamp(120, 900);
+    settings.opacity = settings.opacity.clamp(0.2, 1.0);
+    settings.radius = settings.radius.min(40);
+    settings.font_scale = settings.font_scale.clamp(0.7, 2.0);
+    settings.interval_ms = settings.interval_ms.clamp(500, 10_000);
+    settings.title = settings.title.chars().take(40).collect();
+
+    if !valid_accent(&settings.accent) {
+        settings.accent = "#38e0a0".into();
+    }
+    if !matches!(settings.z_mode.as_str(), "normal" | "top" | "desktop") {
+        settings.z_mode = "normal".into();
+    }
+    if settings.x < -1 || settings.x > 20_000 {
+        settings.x = -1;
+    }
+    if settings.y < -1 || settings.y > 20_000 {
+        settings.y = -1;
+    }
+
+    settings
 }
 
 pub fn save_settings(patch: &serde_json::Value) -> WidgetSettings {
@@ -62,7 +96,7 @@ pub fn save_settings(patch: &serde_json::Value) -> WidgetSettings {
             base.insert(key.clone(), value.clone());
         }
     }
-    let merged: WidgetSettings = serde_json::from_value(current).unwrap_or_default();
+    let merged = clamp_settings(serde_json::from_value(current).unwrap_or_default());
     let _ = fs::write(
         settings_file(),
         serde_json::to_string_pretty(&merged).unwrap_or_default(),
@@ -146,6 +180,10 @@ pub fn launch(shared: &AppState, patch: Option<serde_json::Value>) -> (bool, Opt
                 (true, None)
             } else {
                 let log = read_log();
+                crate::logging::log(&format!(
+                    "widget launch failed: {}",
+                    log.clone().unwrap_or_else(|| "no output".into())
+                ));
                 runtime.child = None;
                 runtime.last_error = log.clone();
                 (
@@ -162,6 +200,7 @@ pub fn launch(shared: &AppState, patch: Option<serde_json::Value>) -> (bool, Opt
 }
 
 pub fn stop(shared: &AppState) -> bool {
+    crate::logging::log("widget stop");
     if let Some(mut child) = shared.widget.lock().unwrap().child.take() {
         let _ = child.kill();
         let _ = child.wait();
@@ -211,6 +250,9 @@ fn autostart_command() -> String {
 }
 
 pub fn set_autostart(enabled: bool) -> bool {
+    if paths::is_portable() {
+        return false;
+    }
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let Ok(key) = hkcu.open_subkey_with_flags(RUN_KEY, KEY_READ | KEY_WRITE) else {
         return false;
@@ -225,11 +267,35 @@ pub fn set_autostart(enabled: bool) -> bool {
 }
 
 pub fn get_autostart() -> bool {
+    if paths::is_portable() {
+        return false;
+    }
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let Ok(key) = hkcu.open_subkey_with_flags(RUN_KEY, KEY_READ) else {
         return false;
     };
     key.get_value::<String, _>(RUN_NAME).is_ok()
+}
+
+/// The old build stored the widget script under `%LOCALAPPDATA%\DiskMaster`.
+/// Data migration copies it to the new directory; the Run entry still points to
+/// the old path, so it is rewritten to the new one.
+pub fn migrate_autostart() {
+    if paths::is_portable() {
+        return;
+    }
+    let Ok(key) = RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(RUN_KEY, KEY_READ) else {
+        return;
+    };
+    let Ok(value) = key.get_value::<String, _>(RUN_NAME) else {
+        return;
+    };
+    let legacy = paths::local_appdata().join("DiskMaster").join("widget");
+    if value.contains(&legacy.to_string_lossy().to_string()) {
+        let _ = ensure_script();
+        let _ = set_autostart(true);
+        crate::logging::log("widget autostart migrated to new data directory");
+    }
 }
 
 pub fn status(shared: &AppState) -> WidgetStatus {

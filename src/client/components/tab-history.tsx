@@ -6,6 +6,13 @@ import { formatBytes, formatDate } from "@/client/lib/format";
 import { Badge, Button, Card, EmptyState, SectionTitle } from "./ui";
 import { ArrowRightIcon, GaugeIcon, RefreshIcon } from "./icons";
 
+function formatAxis(bytes: number): string {
+  const gb = bytes / 1024 ** 3;
+  if (gb >= 1) return `${gb.toFixed(2)} ГБ`;
+  const mb = bytes / 1024 ** 2;
+  return `${mb.toFixed(1)} МБ`;
+}
+
 function DriveChart({
   points,
   letter,
@@ -54,8 +61,9 @@ function DriveChart({
   const first = series[0];
   const last = series[series.length - 1];
   const delta = last.used - first.used;
-  const days = Math.max(1, (last.t - first.t) / (24 * 60 * 60 * 1000));
-  const perDay = delta / days;
+  const spanMs = last.t - first.t;
+  // A trend from a few minutes of data is just noise — require an hour.
+  const perDay = spanMs >= 60 * 60 * 1000 ? delta / (spanMs / 86_400_000) : null;
 
   const ticks = [upper, (upper + lower) / 2, lower];
 
@@ -70,10 +78,14 @@ function DriveChart({
             сейчас {formatBytes(last.used)} из {formatBytes(capacity)}
           </span>
         </div>
-        <Badge variant={perDay > 0 ? "warn" : "success"}>
-          {perDay > 0 ? "+" : ""}
-          {formatBytes(Math.abs(perDay), 0)}/день {perDay > 0 ? "растёт" : "освобождается"}
-        </Badge>
+        {perDay === null ? (
+          <Badge variant="neutral">мало данных для тренда</Badge>
+        ) : (
+          <Badge variant={perDay > 0 ? "warn" : "success"}>
+            {perDay > 0 ? "+" : ""}
+            {formatBytes(Math.abs(perDay), 0)}/день {perDay > 0 ? "растёт" : "освобождается"}
+          </Badge>
+        )}
       </div>
 
       <svg viewBox={`0 0 ${width} ${height}`} className="h-40 w-full" preserveAspectRatio="none">
@@ -95,7 +107,7 @@ function DriveChart({
               strokeDasharray="3 4"
             />
             <text x={padLeft - 6} y={yFor(value) + 3} textAnchor="end" className="fill-slate-500" fontSize="9">
-              {formatBytes(value, 0)}
+              {formatAxis(value)}
             </text>
           </g>
         ))}

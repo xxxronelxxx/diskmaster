@@ -123,7 +123,15 @@ export function CleanupTab({
     if (selection?.jobId === jobId) return selection.ids;
     return new Set(
       visible
-        .filter((category) => category.status === "done" && category.bytes > 0 && category.risk === "safe")
+        .filter(
+          (category) =>
+            category.status === "done" &&
+            category.bytes > 0 &&
+            category.risk === "safe" &&
+            // Emptying the recycle bin is irreversible, so it is never
+            // preselected — the user has to opt in explicitly.
+            category.id !== "recycle-bin",
+        )
         .map((category) => category.id),
     );
   }, [selection, jobId, visible]);
@@ -136,12 +144,15 @@ export function CleanupTab({
     cleaned[category.id] !== undefined ? 0 : category.bytes;
 
   const selectable = visible.filter((category) => remaining(category) > 0 && category.status !== "error");
+  // Bulk actions never touch the recycle bin: emptying it is irreversible.
+  const safeSelectable = selectable.filter((category) => category.id !== "recycle-bin");
   const selectedBytes = visible
     .filter((category) => selected.has(category.id))
     .reduce((sum, category) => sum + remaining(category), 0);
   const totalBytes = visible.reduce((sum, category) => sum + remaining(category), 0);
   const totalFiles = visible.reduce((sum, category) => sum + (cleaned[category.id] !== undefined ? 0 : category.files), 0);
-  const allSelected = selectable.length > 0 && selectable.every((category) => selected.has(category.id));
+  const allSelected =
+    safeSelectable.length > 0 && safeSelectable.every((category) => selected.has(category.id));
 
   const selectedCategories = visible.filter((category) => selected.has(category.id));
 
@@ -273,8 +284,8 @@ export function CleanupTab({
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => setSelected(new Set(selectable.map((category) => category.id)))}
-              disabled={selectable.length === 0}
+              onClick={() => setSelected(new Set(safeSelectable.map((category) => category.id)))}
+              disabled={safeSelectable.length === 0}
             >
               Выбрать всё безопасное
             </Button>
@@ -296,12 +307,12 @@ export function CleanupTab({
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
               Категории
             </p>
-            {finished && selectable.length > 0 ? (
+            {finished && safeSelectable.length > 0 ? (
               <button
                 className="text-[11px] text-slate-400 hover:text-white"
                 onClick={() =>
                   setSelected(
-                    allSelected ? new Set() : new Set(selectable.map((category) => category.id)),
+                    allSelected ? new Set() : new Set(safeSelectable.map((category) => category.id)),
                   )
                 }
               >
@@ -350,8 +361,10 @@ export function CleanupTab({
         description={
           <>
             Будет удалено <b className="text-white">{formatBytes(selectedBytes)}</b> в{" "}
-            {selectedCategories.length} категориях. Файлы удаляются безвозвратно, корзина
-            очищается полностью.
+            {selectedCategories.length} категориях. Файлы удаляются безвозвратно
+            {selectedCategories.some((category) => category.id === "recycle-bin")
+              ? ", корзина очищается полностью."
+              : "."}
           </>
         }
         footer={

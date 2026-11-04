@@ -160,6 +160,10 @@ pub fn save(config: &ScheduleConfig) -> (ScheduleConfig, bool, Option<String>) {
     }
 
     let (registered, error) = register_task(&next);
+    crate::logging::log(&format!(
+        "schedule save enabled={} registered={} error={:?}",
+        next.enabled, registered, error
+    ));
     (next, registered, error)
 }
 

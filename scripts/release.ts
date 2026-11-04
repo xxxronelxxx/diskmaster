@@ -135,7 +135,7 @@ copyFileSync(artifacts.portable, stablePortable);
 
 const latest = {
   version,
-  notes: "См. описание релиза",
+  notes: "",
   pub_date: new Date().toISOString(),
   platforms: {
     "windows-x86_64": {
@@ -144,9 +144,6 @@ const latest = {
     },
   },
 };
-
-const latestPath = path.join(outputDir, "latest.json");
-writeFileSync(latestPath, `${JSON.stringify(latest, null, 2)}\n`, "utf8");
 
 const sums = [
   `${sha256(artifacts.setup)}  ${path.basename(artifacts.setup)}`,
@@ -177,6 +174,11 @@ const notes = notesFile
       "SHA-256: см. `SHA256SUMS.txt`.",
       "",
     ].join("\n");
+
+latest.notes = notes.slice(0, 800);
+
+const latestPath = path.join(outputDir, "latest.json");
+writeFileSync(latestPath, `${JSON.stringify(latest, null, 2)}\n`, "utf8");
 
 const assets = [
   artifacts.setup,

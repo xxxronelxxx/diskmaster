@@ -5,6 +5,7 @@ mod duplicates;
 mod folders;
 mod guard;
 mod history;
+mod logging;
 mod metrics;
 mod paths;
 mod programs;
@@ -18,7 +19,7 @@ mod types;
 mod widget;
 mod winget;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 
 use serde::{Deserialize, Serialize};
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
@@ -30,6 +31,7 @@ use winreg::RegKey;
 use crate::state::AppState;
 
 static QUITTING: AtomicBool = AtomicBool::new(false);
+static LAST_STATE_SAVE: AtomicI64 = AtomicI64::new(0);
 const AUTOSTART_KEY: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 const AUTOSTART_NAME: &str = "DiskMaster";
 
@@ -84,15 +86,24 @@ fn load_window_state() -> Option<WindowState> {
     serde_json::from_str(&raw).ok()
 }
 
-fn save_window_state(window: &tauri::Window) {
-    let Ok(position) = window.outer_position() else { return };
-    let Ok(size) = window.inner_size() else { return };
+fn write_window_state(
+    position: tauri::PhysicalPosition<i32>,
+    size: tauri::PhysicalSize<u32>,
+    maximized: bool,
+    force: bool,
+) {
+    let now = chrono::Utc::now().timestamp_millis();
+    if !force && now - LAST_STATE_SAVE.load(Ordering::Relaxed) < 800 {
+        return;
+    }
+    LAST_STATE_SAVE.store(now, Ordering::Relaxed);
+
     let state = WindowState {
         x: position.x,
         y: position.y,
         width: size.width,
         height: size.height,
-        maximized: window.is_maximized().unwrap_or(false),
+        maximized,
     };
     let path = window_state_file();
     paths::ensure_parent(&path);
@@ -101,31 +112,45 @@ fn save_window_state(window: &tauri::Window) {
     }
 }
 
+fn save_window_state(window: &tauri::Window, force: bool) {
+    let Ok(position) = window.outer_position() else { return };
+    let Ok(size) = window.inner_size() else { return };
+    write_window_state(position, size, window.is_maximized().unwrap_or(false), force);
+}
+
 /* -------------------------------------------------------------------------- */
 /*                                   tray                                     */
 /* -------------------------------------------------------------------------- */
 
-fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let portable = paths::is_portable();
     let open = MenuItem::with_id(app, "open", "Открыть Диск-Мастер", true, None::<&str>)?;
     let widget = MenuItem::with_id(app, "widget", "Показать/скрыть виджет", true, None::<&str>)?;
     let snapshot = MenuItem::with_id(app, "snapshot", "Сделать снимок свободного места", true, None::<&str>)?;
     let autostart = CheckMenuItem::with_id(
         app,
         "autostart",
-        "Запускать при входе в Windows",
-        true,
-        autostart_enabled(),
+        if portable {
+            "Автозапуск недоступен в портативной версии"
+        } else {
+            "Запускать при входе в Windows"
+        },
+        !portable,
+        !portable && autostart_enabled(),
         None::<&str>,
     )?;
     let quit = MenuItem::with_id(app, "quit", "Выход", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let separator2 = PredefinedMenuItem::separator(app)?;
 
-    let menu = Menu::with_items(
+    Menu::with_items(
         app,
         &[&open, &separator, &widget, &snapshot, &separator2, &autostart, &quit],
-    )?;
+    )
+}
 
+fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+    let menu = build_menu(app)?;
     let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
 
     TrayIconBuilder::with_id("main-tray")
@@ -158,8 +183,17 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 show_main(app);
             }
             "autostart" => {
+                if paths::is_portable() {
+                    return;
+                }
                 let next = !autostart_enabled();
                 set_autostart(next);
+                logging::log(&format!("autostart -> {next}"));
+                if let Some(tray) = app.tray_by_id("main-tray") {
+                    if let Ok(menu) = build_menu(app) {
+                        let _ = tray.set_menu(Some(menu));
+                    }
+                }
             }
             "quit" => {
                 QUITTING.store(true, Ordering::SeqCst);
@@ -198,6 +232,15 @@ fn run_headless_clean() {
 /* -------------------------------------------------------------------------- */
 
 fn main() {
+    if !paths::is_portable() {
+        paths::migrate_legacy_data();
+    }
+    logging::log(&format!(
+        "start portable={} argv={:?}",
+        paths::is_portable(),
+        std::env::args().collect::<Vec<_>>()
+    ));
+
     if std::env::args().any(|value| value == "--run-scheduled-clean") {
         run_headless_clean();
         return;
@@ -246,6 +289,7 @@ fn main() {
             commands::widget_stop,
             commands::widget_save,
             commands::widget_autostart,
+            commands::log_event,
         ])
         .setup(|app| {
             let hidden = std::env::args().any(|value| value == "--hidden");
@@ -299,7 +343,9 @@ fn main() {
             }
 
             build_tray(app.handle())?;
+            widget::migrate_autostart();
             history::start_sampler();
+            logging::log("window setup complete");
 
             // Warm up the metrics sampler after the first paint so the
             // monitoring tab has data immediately without slowing startup.
@@ -316,11 +362,17 @@ fn main() {
                     return;
                 }
                 api.prevent_close();
-                save_window_state(window);
+                save_window_state(window, true);
                 let _ = window.hide();
             }
-            WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
-                save_window_state(window);
+            WindowEvent::Moved(_) => {
+                save_window_state(window, false);
+            }
+            WindowEvent::Resized(_) => {
+                save_window_state(window, false);
+                if window.is_minimized().unwrap_or(false) {
+                    let _ = window.hide();
+                }
             }
             _ => {}
         });
@@ -335,9 +387,20 @@ fn main() {
         }
     };
 
-    app.run(|_app, event| {
+    app.run(|app, event| {
         if let RunEvent::Exit = event {
+            if let Some(window) = app.get_webview_window("main") {
+                if let (Ok(position), Ok(size)) = (window.outer_position(), window.inner_size()) {
+                    write_window_state(
+                        position,
+                        size,
+                        window.is_maximized().unwrap_or(false),
+                        true,
+                    );
+                }
+            }
             metrics::stop_global();
+            logging::log("exit");
         }
     });
 }

@@ -42,7 +42,9 @@ cd src-tauri && cargo clippy -- -D warnings
 
 ## Storage
 
-- Installed: `%LOCALAPPDATA%\DiskMaster`.
+- Installed: `%LOCALAPPDATA%\DiskMasterData` (legacy `DiskMaster` is copied
+  once by `paths::migrate_legacy_data`, never deleted).
+- Logs: `%LOCALAPPDATA%\DiskMasterData\logspp.log` (append-only).
 - Portable: `disk-master-data` next to the exe, enabled by `portable.marker`.
 - Use `crate::paths::storage_path` instead of hardcoded paths.
 

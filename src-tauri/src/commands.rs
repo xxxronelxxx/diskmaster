@@ -473,9 +473,24 @@ pub struct WidgetAutostartInput {
 
 #[tauri::command]
 pub async fn widget_autostart(input: WidgetAutostartInput) -> CmdResult<OkResult> {
+    if crate::paths::is_portable() {
+        return Ok(OkResult {
+            ok: false,
+            error: Some("Автозапуск недоступен в портативной версии".into()),
+        });
+    }
     blocking(move || OkResult {
         ok: widget::set_autostart(input.enabled),
         error: None,
     })
     .await
+}
+
+/// Frontend diagnostics (update failures, unexpected errors) go to the same
+/// append-only log as the backend messages.
+#[tauri::command]
+pub fn log_event(level: String, message: String) {
+    let level = level.chars().take(16).collect::<String>();
+    let message = message.chars().take(500).collect::<String>();
+    crate::logging::log(&format!("FRONTEND {level}: {message}"));
 }

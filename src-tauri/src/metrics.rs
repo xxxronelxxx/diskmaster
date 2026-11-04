@@ -219,8 +219,10 @@ pub fn kill_process(pid: u32) -> (bool, Option<String>) {
     if pid == std::process::id() {
         return (false, Some("Нельзя завершить собственный процесс".into()));
     }
-    let known = list_processes(40).iter().any(|item| item.pid == pid);
-    let _ = known; // the list is advisory; the pid still has to exist
+    // Only processes the user could actually see in the list are killable.
+    if !list_processes(40).iter().any(|item| item.pid == pid) {
+        return (false, Some("Процесс отсутствует в списке активных".into()));
+    }
 
     let script = format!(
         "try {{ Stop-Process -Id {pid} -Force -ErrorAction Stop; \
@@ -248,7 +250,21 @@ pub fn kill_process(pid: u32) -> (bool, Option<String>) {
 
 pub fn state(processes: Vec<ProcessInfo>) -> MetricsState {
     let handle = global();
-    let (history, latest, error) = handle.snapshot();
+    let (mut history, latest, error) = handle.snapshot();
+
+    // Per-core values are only needed for the latest sample. Dropping them
+    // from history keeps the 1.5 s poll small (240 samples × 16 cores).
+    let latest_cores = latest
+        .as_ref()
+        .map(|sample| sample.cores.clone())
+        .unwrap_or_default();
+    for sample in history.iter_mut() {
+        sample.cores.clear();
+    }
+    if let Some(last) = history.last_mut() {
+        last.cores = latest_cores;
+    }
+
     MetricsState {
         history,
         latest,

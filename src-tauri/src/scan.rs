@@ -224,6 +224,7 @@ struct WalkResult {
     files: u64,
     bytes: u64,
     timed_out: bool,
+    denied: u64,
 }
 
 fn walk(
@@ -237,22 +238,33 @@ fn walk(
     let mut files = 0u64;
     let mut bytes = 0u64;
     let mut timed_out = false;
+    let mut denied = 0u64;
     let mut last_report = Instant::now();
     let mut walker = jwalk::WalkDir::new(root).skip_hidden(false);
     if let Some(depth) = max_depth {
         walker = walker.max_depth(depth);
     }
 
-    for entry in walker.into_iter().filter_map(Result::ok) {
+    for entry in walker.into_iter() {
         if started.elapsed() > budget {
             timed_out = true;
             break;
         }
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(_) => {
+                // jwalk surfaces unreadable directories (ACL, locked files) as
+                // errors; they are exactly what the "needs admin" hint is for.
+                denied += 1;
+                continue;
+            }
+        };
         let file_type = entry.file_type();
         if !file_type.is_file() {
             continue;
         }
         let Ok(metadata) = entry.metadata() else {
+            denied += 1;
             continue;
         };
         files += 1;
@@ -268,6 +280,7 @@ fn walk(
         files,
         bytes,
         timed_out,
+        denied,
     }
 }
 
@@ -315,6 +328,7 @@ pub fn start_scan(shared: &AppState, threshold_mb: Option<f64>) -> ScanState {
         *guard = Some(job.clone());
     }
 
+    crate::logging::log(&format!("scan start threshold={threshold}"));
     let shared_clone = shared.clone();
     std::thread::spawn(move || run_scan(shared_clone, threshold));
     job
@@ -483,6 +497,12 @@ fn run_scan(shared: AppState, threshold: u64) {
         job.phase = "done".into();
         job.scan_path = String::new();
         job.finished_at = Some(chrono::Utc::now().timestamp_millis());
+        crate::logging::log(&format!(
+            "scan done junk_bytes={} junk_files={} large={}",
+            job.total_junk_bytes,
+            job.total_junk_files,
+            job.large_files.len()
+        ));
     }
 }
 
@@ -543,7 +563,7 @@ fn measure_category(
 
     let mut bytes = 0u64;
     let mut files = 0u64;
-    let denied = 0u64;
+    let mut denied = 0u64;
     let mut status = "done".to_string();
     let mut error: Option<String> = None;
 
@@ -593,6 +613,7 @@ fn measure_category(
         );
         bytes += result.bytes;
         files += result.files;
+        denied += result.denied;
         if result.timed_out {
             status = "partial".into();
         }

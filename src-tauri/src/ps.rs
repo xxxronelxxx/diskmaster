@@ -120,12 +120,22 @@ pub fn run(script: &str, timeout: Duration) -> PsOutput {
         Err(_) => None,
     };
 
-    PsOutput {
+    let result = PsOutput {
         stdout: out_handle.join().unwrap_or_default(),
         stderr: err_handle.join().unwrap_or_default(),
         code: status.and_then(|status| status.code()),
         timed_out,
+    };
+
+    if result.timed_out {
+        crate::logging::log("powershell timed out");
+    } else if result.code.unwrap_or(0) != 0 && !result.stderr.trim().is_empty() {
+        let message = result.stderr.trim();
+        let short: String = message.chars().take(300).collect();
+        crate::logging::log(&format!("powershell failed: {short}"));
     }
+
+    result
 }
 
 pub fn run_json<T: serde::de::DeserializeOwned>(script: &str, timeout: Duration) -> Option<T> {

@@ -68,7 +68,10 @@ export function useUpdater(): Updater {
         if (manual) {
           flash("Не удалось проверить обновления. Проверьте подключение к сети.");
         }
-        if (import.meta.env.DEV) console.warn("updater", cause);
+        void invoke("log_event", {
+          level: "warn",
+          message: `update check failed: ${String(cause)}`,
+        }).catch(() => undefined);
       }
     },
     [flash],
@@ -125,9 +128,13 @@ export function useUpdater(): Updater {
       });
 
       await relaunch();
-    } catch {
+    } catch (cause) {
       setStatus("error");
       flash("Не удалось установить обновление");
+      void invoke("log_event", {
+        level: "error",
+        message: `update install failed: ${String(cause)}`,
+      }).catch(() => undefined);
     }
   }, [update, flash]);
 
