@@ -62,10 +62,15 @@ if (!existsSync(bundleDir)) {
   throw new Error(`NSIS bundle directory not found: ${bundleDir}`);
 }
 const bundleFiles = readdirSync(bundleDir);
-const setupExe = bundleFiles.find((name) => name.endsWith("-setup.exe"));
+const versionToken = `_${version}_`;
+const setupExe = bundleFiles.find(
+  (name) => name.endsWith("-setup.exe") && name.includes(versionToken),
+);
 // Tauri 2 emits either a `.nsis.zip` updater bundle or signs the setup exe
-// directly, depending on the bundler version. Support both.
-const updaterFile = bundleFiles.find((name) => name.endsWith(".nsis.zip")) ?? setupExe;
+// directly, depending on the bundler version. Support both, but only for the
+// version being released — stale artifacts from earlier builds stay ignored.
+const updaterFile =
+  bundleFiles.find((name) => name.endsWith(".nsis.zip") && name.includes(versionToken)) ?? setupExe;
 const updaterSig = `${updaterFile ?? ""}.sig`;
 
 if (!setupExe || !updaterFile || !existsSync(path.join(bundleDir, updaterSig))) {
