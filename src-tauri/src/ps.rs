@@ -113,5 +113,3 @@ pub fn run(script: &str, timeout: Duration) -> PsOutput {
 
     result
 }
-
-

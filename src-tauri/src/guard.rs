@@ -149,10 +149,8 @@ mod tests {
     #[test]
     fn recycle_bin_api_accepts_registered_temp_file() {
         let mut allow = AllowList::new();
-        let path = std::env::temp_dir().join(format!(
-            "disk-master-test-{}.tmp",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("disk-master-test-{}.tmp", std::process::id()));
         std::fs::write(&path, b"test").unwrap();
         allow.register(&path);
         let resolved = assert_deletable(&path, &allow).unwrap();

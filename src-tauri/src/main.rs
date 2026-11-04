@@ -32,6 +32,7 @@ use crate::state::AppState;
 
 static QUITTING: AtomicBool = AtomicBool::new(false);
 static LAST_STATE_SAVE: AtomicI64 = AtomicI64::new(0);
+static WIDGET_STATE_SAVE: AtomicI64 = AtomicI64::new(0);
 const AUTOSTART_KEY: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 const AUTOSTART_NAME: &str = "DiskMaster";
 
@@ -52,7 +53,9 @@ fn autostart_enabled() -> bool {
 }
 
 fn set_autostart(enabled: bool) {
-    let Ok(key) = RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(AUTOSTART_KEY, KEY_READ | KEY_WRITE) else {
+    let Ok(key) = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey_with_flags(AUTOSTART_KEY, KEY_READ | KEY_WRITE)
+    else {
         return;
     };
     if enabled {
@@ -113,9 +116,18 @@ fn write_window_state(
 }
 
 fn save_window_state(window: &tauri::Window, force: bool) {
-    let Ok(position) = window.outer_position() else { return };
-    let Ok(size) = window.inner_size() else { return };
-    write_window_state(position, size, window.is_maximized().unwrap_or(false), force);
+    let Ok(position) = window.outer_position() else {
+        return;
+    };
+    let Ok(size) = window.inner_size() else {
+        return;
+    };
+    write_window_state(
+        position,
+        size,
+        window.is_maximized().unwrap_or(false),
+        force,
+    );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -126,7 +138,13 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let portable = paths::is_portable();
     let open = MenuItem::with_id(app, "open", "Открыть Диск-Мастер", true, None::<&str>)?;
     let widget = MenuItem::with_id(app, "widget", "Показать/скрыть виджет", true, None::<&str>)?;
-    let snapshot = MenuItem::with_id(app, "snapshot", "Сделать снимок свободного места", true, None::<&str>)?;
+    let snapshot = MenuItem::with_id(
+        app,
+        "snapshot",
+        "Сделать снимок свободного места",
+        true,
+        None::<&str>,
+    )?;
     let autostart = CheckMenuItem::with_id(
         app,
         "autostart",
@@ -145,7 +163,15 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 
     Menu::with_items(
         app,
-        &[&open, &separator, &widget, &snapshot, &separator2, &autostart, &quit],
+        &[
+            &open,
+            &separator,
+            &widget,
+            &snapshot,
+            &separator2,
+            &autostart,
+            &quit,
+        ],
     )
 }
 
@@ -171,11 +197,10 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open" => show_main(app),
             "widget" => {
-                let state = app.state::<AppState>().inner().clone();
-                if widget::is_running(&state) {
-                    widget::stop(&state);
+                if widget::is_running(app) {
+                    widget::stop(app);
                 } else {
-                    let _ = widget::launch(&state, None);
+                    let _ = widget::launch(app, None);
                 }
             }
             "snapshot" => {
@@ -212,8 +237,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 
 fn arg_value(name: &str) -> Option<String> {
     let prefix = format!("--{name}=");
-    std::env::args()
-        .find_map(|value| value.strip_prefix(&prefix).map(str::to_string))
+    std::env::args().find_map(|value| value.strip_prefix(&prefix).map(str::to_string))
 }
 
 fn run_headless_clean() {
@@ -295,6 +319,9 @@ fn main() {
             commands::widget_stop,
             commands::widget_save,
             commands::widget_autostart,
+            commands::widget_data,
+            commands::widget_hide,
+            commands::show_main,
             commands::log_event,
         ])
         .setup(|app| {
@@ -351,6 +378,10 @@ fn main() {
             build_tray(app.handle())?;
             metrics::cleanup_legacy_samplers();
             widget::migrate_autostart();
+
+            if std::env::args().any(|value| value == "--widget") {
+                let _ = widget::launch(app.handle(), None);
+            }
             history::start_sampler();
             logging::log("window setup complete");
 
@@ -363,25 +394,49 @@ fn main() {
 
             Ok(())
         })
-        .on_window_event(|window, event| match event {
-            WindowEvent::CloseRequested { api, .. } => {
-                if QUITTING.load(Ordering::SeqCst) {
-                    return;
+        .on_window_event(|window, event| {
+            if window.label() == "widget" {
+                match event {
+                    WindowEvent::CloseRequested { api, .. } => {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
+                    WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
+                        let now = chrono::Utc::now().timestamp_millis();
+                        if now - WIDGET_STATE_SAVE.load(Ordering::Relaxed) > 800 {
+                            WIDGET_STATE_SAVE.store(now, Ordering::Relaxed);
+                            if let (Ok(position), Ok(size)) =
+                                (window.outer_position(), window.inner_size())
+                            {
+                                widget::remember_geometry(position, size);
+                            }
+                        }
+                    }
+                    _ => {}
                 }
-                api.prevent_close();
-                save_window_state(window, true);
-                let _ = window.hide();
+                return;
             }
-            WindowEvent::Moved(_) => {
-                save_window_state(window, false);
-            }
-            WindowEvent::Resized(_) => {
-                save_window_state(window, false);
-                if window.is_minimized().unwrap_or(false) {
+
+            match event {
+                WindowEvent::CloseRequested { api, .. } => {
+                    if QUITTING.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    api.prevent_close();
+                    save_window_state(window, true);
                     let _ = window.hide();
                 }
+                WindowEvent::Moved(_) => {
+                    save_window_state(window, false);
+                }
+                WindowEvent::Resized(_) => {
+                    save_window_state(window, false);
+                    if window.is_minimized().unwrap_or(false) {
+                        let _ = window.hide();
+                    }
+                }
+                _ => {}
             }
-            _ => {}
         });
 
     let app = match builder.build(tauri::generate_context!()) {

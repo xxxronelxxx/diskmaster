@@ -171,9 +171,7 @@ pub fn list_processes(limit: usize) -> Vec<ProcessInfo> {
             },
             memory: process.memory(),
             cpu_percent: (process.cpu_usage() as f64 * 10.0).round() / 10.0,
-            path: process
-                .exe()
-                .map(|path| path.to_string_lossy().to_string()),
+            path: process.exe().map(|path| path.to_string_lossy().to_string()),
         })
         .collect();
 
@@ -209,7 +207,10 @@ pub fn kill_process(pid: u32) -> (bool, Option<String>) {
                 *PROCESS_CACHE.lock().unwrap() = None;
                 (true, None)
             } else {
-                (false, Some("Не удалось завершить процесс (нужны права)".into()))
+                (
+                    false,
+                    Some("Не удалось завершить процесс (нужны права)".into()),
+                )
             }
         }
         None => (false, Some("Процесс уже завершён".into())),

@@ -166,8 +166,7 @@ pub fn scan_duplicates(
         .process_read_dir(|_depth, _path, _state, children| {
             children.retain(|entry| match entry {
                 Ok(entry) => {
-                    !entry.file_type().is_dir()
-                        || !skip_dir(&entry.file_name().to_string_lossy())
+                    !entry.file_type().is_dir() || !skip_dir(&entry.file_name().to_string_lossy())
                 }
                 Err(_) => true,
             });
@@ -248,7 +247,15 @@ pub fn scan_duplicates(
             let done = processed.fetch_add(1, Ordering::Relaxed) + 1;
             if done % 500 == 0 {
                 let percent = 30 + ((done as f64 / total.max(1) as f64) * 40.0) as u32;
-                publish_progress(shared, "quick", scanned, done, total, percent.min(69), false);
+                publish_progress(
+                    shared,
+                    "quick",
+                    scanned,
+                    done,
+                    total,
+                    percent.min(69),
+                    false,
+                );
             }
             Some((candidate.clone(), hash))
         })
@@ -295,7 +302,15 @@ pub fn scan_duplicates(
             let done = full_hashed.fetch_add(1, Ordering::Relaxed) + 1;
             if done % 200 == 0 {
                 let percent = 70 + ((done as f64 / full_total.max(1) as f64) * 29.0) as u32;
-                publish_progress(shared, "hashing", scanned, done, full_total, percent.min(99), false);
+                publish_progress(
+                    shared,
+                    "hashing",
+                    scanned,
+                    done,
+                    full_total,
+                    percent.min(99),
+                    false,
+                );
             }
             Some((candidate.clone(), hash))
         })

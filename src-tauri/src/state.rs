@@ -1,10 +1,9 @@
-use std::process::Child;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use crate::duplicates::DuplicateState;
 use crate::guard::AllowList;
-use crate::types::{InstalledProgram, ScanState, WidgetSettings, WingetListing};
+use crate::types::{InstalledProgram, ScanState, WingetListing};
 
 pub struct ProgramCache {
     pub at: Instant,
@@ -16,13 +15,6 @@ pub struct UpdateCache {
     pub listing: WingetListing,
 }
 
-#[derive(Default)]
-pub struct WidgetRuntime {
-    pub child: Option<Child>,
-    pub last_error: Option<String>,
-    pub settings: Option<WidgetSettings>,
-}
-
 #[derive(Clone)]
 pub struct AppState {
     pub scan: Arc<Mutex<Option<ScanState>>>,
@@ -30,7 +22,6 @@ pub struct AppState {
     pub duplicates: Arc<Mutex<DuplicateState>>,
     pub programs: Arc<Mutex<Option<ProgramCache>>>,
     pub updates: Arc<Mutex<Option<UpdateCache>>>,
-    pub widget: Arc<Mutex<WidgetRuntime>>,
 }
 
 impl AppState {
@@ -41,7 +32,6 @@ impl AppState {
             duplicates: Arc::new(Mutex::new(DuplicateState::default())),
             programs: Arc::new(Mutex::new(None)),
             updates: Arc::new(Mutex::new(None)),
-            widget: Arc::new(Mutex::new(WidgetRuntime::default())),
         }
     }
 }

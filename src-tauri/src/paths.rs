@@ -100,9 +100,7 @@ pub fn migrate_legacy_data() {
 
     let legacy = legacy_dir();
     let candidates = ["history", "schedule", "widget"];
-    let has_data = candidates
-        .iter()
-        .any(|name| legacy.join(name).exists())
+    let has_data = candidates.iter().any(|name| legacy.join(name).exists())
         || legacy.join("window-state.json").exists();
     if !has_data {
         return;

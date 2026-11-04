@@ -124,11 +124,17 @@ pub fn analyze(shared: &AppState, target: Option<String>) -> FolderAnalysis {
     let children: Vec<PathBuf> = dirents
         .flatten()
         .map(|entry| entry.path())
-        .filter(|path| !path.symlink_metadata().map(|meta| meta.file_type().is_symlink()).unwrap_or(false))
+        .filter(|path| {
+            !path
+                .symlink_metadata()
+                .map(|meta| meta.file_type().is_symlink())
+                .unwrap_or(false)
+        })
         .collect();
 
     let total = children.len().max(1);
-    let budget_per_entry = Duration::from_millis(9_000 / total as u64).max(Duration::from_millis(600));
+    let budget_per_entry =
+        Duration::from_millis(9_000 / total as u64).max(Duration::from_millis(600));
 
     let entries: Vec<Option<FolderEntry>> = children
         .par_iter()
@@ -221,7 +227,9 @@ pub fn delete(shared: &AppState, paths: &[String], permanent: bool) -> DeleteRes
             Ok(metadata) => metadata,
             Err(_) => {
                 result.ok = false;
-                result.errors.push(format!("Не найдено: {}", resolved.display()));
+                result
+                    .errors
+                    .push(format!("Не найдено: {}", resolved.display()));
                 continue;
             }
         };
@@ -246,11 +254,13 @@ pub fn delete(shared: &AppState, paths: &[String], permanent: bool) -> DeleteRes
                 }
                 Err(error) => {
                     result.ok = false;
-                    result.errors.push(if error.kind() == std::io::ErrorKind::PermissionDenied {
-                        format!("Нет прав: {}", resolved.display())
-                    } else {
-                        format!("Ошибка: {}", resolved.display())
-                    });
+                    result
+                        .errors
+                        .push(if error.kind() == std::io::ErrorKind::PermissionDenied {
+                            format!("Нет прав: {}", resolved.display())
+                        } else {
+                            format!("Ошибка: {}", resolved.display())
+                        });
                 }
             }
         } else {
@@ -261,7 +271,9 @@ pub fn delete(shared: &AppState, paths: &[String], permanent: bool) -> DeleteRes
                 }
                 Err(error) => {
                     result.ok = false;
-                    result.errors.push(format!("{}: {error}", resolved.display()));
+                    result
+                        .errors
+                        .push(format!("{}: {error}", resolved.display()));
                 }
             }
         }
@@ -269,4 +281,3 @@ pub fn delete(shared: &AppState, paths: &[String], permanent: bool) -> DeleteRes
 
     result
 }
-

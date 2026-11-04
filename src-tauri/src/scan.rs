@@ -4,7 +4,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-
 use crate::guard;
 use crate::paths::{home_dir, local_appdata, system_root};
 use crate::state::AppState;
@@ -25,7 +24,10 @@ fn browser_cache_paths() -> Vec<PathBuf> {
     let bases = [
         local.join("Google").join("Chrome").join("User Data"),
         local.join("Microsoft").join("Edge").join("User Data"),
-        local.join("BraveSoftware").join("Brave-Browser").join("User Data"),
+        local
+            .join("BraveSoftware")
+            .join("Brave-Browser")
+            .join("User Data"),
         local.join("Yandex").join("YandexBrowser").join("User Data"),
         local.join("Opera Software").join("Opera Stable"),
     ];
@@ -366,7 +368,8 @@ fn run_scan(shared: AppState, threshold: u64) {
                 .unwrap_or_else(|| def.name.into());
         }
 
-        let (bytes, files, status, error) = measure_category(shared.clone(), def, index, files_done, bytes_done);
+        let (bytes, files, status, error) =
+            measure_category(shared.clone(), def, index, files_done, bytes_done);
         files_done += files;
         bytes_done += bytes;
 
@@ -398,12 +401,17 @@ fn run_scan(shared: AppState, threshold: u64) {
     let home = home_dir();
     let mut roots: Vec<PathBuf> = vec![home.clone()];
     for letter in drives {
-        if !home.to_string_lossy().to_lowercase().starts_with(&letter.to_lowercase()) {
+        if !home
+            .to_string_lossy()
+            .to_lowercase()
+            .starts_with(&letter.to_lowercase())
+        {
             roots.push(PathBuf::from(format!("{letter}\\")));
         }
     }
 
-    let collected: Arc<std::sync::Mutex<Vec<LargeFile>>> = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let collected: Arc<std::sync::Mutex<Vec<LargeFile>>> =
+        Arc::new(std::sync::Mutex::new(Vec::new()));
     let progress_counter = Arc::new(AtomicU64::new(0));
 
     for (root_index, root) in roots.iter().enumerate() {
@@ -469,7 +477,8 @@ fn run_scan(shared: AppState, threshold: u64) {
         {
             let mut guard = shared.scan.lock().unwrap();
             if let Some(job) = guard.as_mut() {
-                job.percent = (60.0 + ((root_index + 1) as f64 / roots_len as f64 * 39.0)).min(99.0) as u32;
+                job.percent =
+                    (60.0 + ((root_index + 1) as f64 / roots_len as f64 * 39.0)).min(99.0) as u32;
             }
         }
     }
@@ -512,7 +521,10 @@ fn is_skipped_large_file(path: &Path, is_home: bool, root: &Path) -> bool {
         .unwrap_or_default();
 
     // System files that are always in use or belong to Windows itself.
-    if matches!(name.as_str(), "pagefile.sys" | "hiberfil.sys" | "swapfile.sys") {
+    if matches!(
+        name.as_str(),
+        "pagefile.sys" | "hiberfil.sys" | "swapfile.sys"
+    ) {
         return true;
     }
     if lower.contains("\\$recycle.bin\\") || lower.contains("\\system volume information\\") {
@@ -604,7 +616,8 @@ fn measure_category(
                 let mut guard = shared_for_progress.scan.lock().unwrap();
                 if let Some(job) = guard.as_mut() {
                     job.scan_path = current.to_string_lossy().to_string();
-                    let percent = ((index as f64 + 0.5) / def.paths.len().max(1) as f64 * 60.0) as u32;
+                    let percent =
+                        ((index as f64 + 0.5) / def.paths.len().max(1) as f64 * 60.0) as u32;
                     job.percent = job.percent.max(percent);
                 }
             },
@@ -648,10 +661,7 @@ fn recycle_bin_info() -> Option<(u64, u64)> {
         return None;
     }
 
-    Some((
-        info.i64NumItems.max(0) as u64,
-        info.i64Size.max(0) as u64,
-    ))
+    Some((info.i64NumItems.max(0) as u64, info.i64Size.max(0) as u64))
 }
 
 fn empty_recycle_bin() -> bool {
@@ -684,7 +694,10 @@ pub fn clean_categories(ids: &[String]) -> CleanResult {
         errors: Vec::new(),
     };
 
-    for def in definitions.iter().filter(|def| ids.iter().any(|id| id == def.id)) {
+    for def in definitions
+        .iter()
+        .filter(|def| ids.iter().any(|id| id == def.id))
+    {
         let mut category = CleanCategoryResult {
             id: def.id.into(),
             name: def.name.into(),
@@ -705,7 +718,9 @@ pub fn clean_categories(ids: &[String]) -> CleanResult {
             }
         } else if def.kind == "files" {
             for target in &def.paths {
-                let Ok(entries) = fs::read_dir(target) else { continue };
+                let Ok(entries) = fs::read_dir(target) else {
+                    continue;
+                };
                 for entry in entries.flatten() {
                     let name = entry.file_name().to_string_lossy().to_string();
                     if def.id == "thumbnails" && !thumbnails_pattern(&name) {
@@ -731,9 +746,15 @@ pub fn clean_categories(ids: &[String]) -> CleanResult {
             }
         } else {
             for target in &def.paths {
-                let Ok(entries) = fs::read_dir(target) else { continue };
+                let Ok(entries) = fs::read_dir(target) else {
+                    continue;
+                };
                 for entry in entries.flatten() {
-                    if entry.file_type().map(|kind| kind.is_symlink()).unwrap_or(false) {
+                    if entry
+                        .file_type()
+                        .map(|kind| kind.is_symlink())
+                        .unwrap_or(false)
+                    {
                         continue;
                     }
                     let path = entry.path();
@@ -784,7 +805,9 @@ pub fn move_to_recycle_bin(paths: &[String]) -> RecycleResult {
     for raw in paths {
         let path = PathBuf::from(raw);
         let Ok(metadata) = fs::symlink_metadata(&path) else {
-            result.errors.push(format!("Не найдено: {}", path.display()));
+            result
+                .errors
+                .push(format!("Не найдено: {}", path.display()));
             continue;
         };
         let size = if metadata.is_dir() {
@@ -832,7 +855,9 @@ pub fn delete_large_files(shared: &AppState, paths: &[String]) -> RecycleResult 
 
     if valid.is_empty() {
         if result.errors.is_empty() {
-            result.errors.push("Файлы не найдены в результатах сканирования".into());
+            result
+                .errors
+                .push("Файлы не найдены в результатах сканирования".into());
         }
         return result;
     }
@@ -871,9 +896,9 @@ pub fn reveal_path(target: &str) -> (bool, Option<String>) {
 /* -------------------------------------------------------------------------- */
 
 fn fixed_drive_letters() -> Vec<String> {
-use windows_sys::Win32::Storage::FileSystem::GetLogicalDrives;
-use windows_sys::Win32::Storage::FileSystem::GetDriveTypeW;
-use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
+    use windows_sys::Win32::Storage::FileSystem::GetDriveTypeW;
+    use windows_sys::Win32::Storage::FileSystem::GetLogicalDrives;
+    use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
     let mask = unsafe { GetLogicalDrives() };
     let mut result = Vec::new();
     for index in 0..26 {

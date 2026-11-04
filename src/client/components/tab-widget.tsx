@@ -437,7 +437,7 @@ export function WidgetTab() {
                 </div>
               </div>
               <p className="mt-2 text-center text-[10px] leading-relaxed text-slate-500">
-                Предпросмотр приблизительный — точный вид задаёт окно WPF на рабочем столе
+                Предпросмотр приблизительный — точный вид задаёт окно виджета на рабочем столе
               </p>
             </Card>
 

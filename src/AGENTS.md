@@ -33,10 +33,10 @@ cd src-tauri && cargo clippy -- -D warnings
 - Metrics/processes use `sysinfo`; programs and startup use `winreg`; the recycle
   bin uses `SHQueryRecycleBin`; the scheduler uses `schtasks`. Do not reintroduce
   PowerShell for these paths.
-- The WPF widget is the only remaining PowerShell process until it is ported to a
-  native Tauri window (planned for 1.3.0).
-- Widget script `src-tauri/scripts/monitor.ps1` is embedded with `include_str!` and
-  written to `%LOCALAPPDATA%\DiskMaster\widget` at runtime. Keep it BOM+CRLF.
+- The widget is a second Tauri window (`widget.html`) with Win32 z-order and
+  click-through applied from `widget.rs`; it is not a separate process.
+- No PowerShell scripts should be added back. PowerShell is only used once for
+  legacy sampler cleanup during migration (`cleanup_legacy_samplers`).
 - Version lives in `package.json`; run `pnpm version:sync` before builds (the
   release/portable scripts already do).
 - Updater signatures: never commit `*.key`, `*.sig`, `tauri/target`, `output/`.

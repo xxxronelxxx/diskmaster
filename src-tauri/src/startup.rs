@@ -3,9 +3,7 @@ use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use winreg::enums::{
-    HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_WRITE, REG_BINARY,
-};
+use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_WRITE, REG_BINARY};
 use winreg::{RegKey, RegValue};
 
 use crate::types::StartupItem;
@@ -152,7 +150,9 @@ fn startup_folder(hive: Hive, path: Option<PathBuf>, label: &str, out: &mut Vec<
 
     for entry in entries.flatten() {
         let file_name = entry.file_name().to_string_lossy().to_string();
-        if file_name.eq_ignore_ascii_case("desktop.ini") || file_name.to_lowercase().ends_with(".log") {
+        if file_name.eq_ignore_ascii_case("desktop.ini")
+            || file_name.to_lowercase().ends_with(".log")
+        {
             continue;
         }
         let path = entry.path();
@@ -366,11 +366,14 @@ pub fn toggle(id: &str, enabled: bool) -> (bool, Option<String>) {
             if write_approved(hive, APPROVED_RUN, &name, enabled) {
                 (true, None)
             } else {
-                (false, Some(if enabled {
-                    "Не удалось включить элемент автозагрузки".into()
-                } else {
-                    "Не удалось отключить элемент автозагрузки".into()
-                }))
+                (
+                    false,
+                    Some(if enabled {
+                        "Не удалось включить элемент автозагрузки".into()
+                    } else {
+                        "Не удалось отключить элемент автозагрузки".into()
+                    }),
+                )
             }
         }
         "folder" => {
@@ -395,7 +398,10 @@ pub fn toggle(id: &str, enabled: bool) -> (bool, Option<String>) {
             if run_schtasks(&["/change", "/tn", &full, verb]) {
                 (true, None)
             } else {
-                (false, Some("Не удалось изменить задачу (нужны права администратора)".into()))
+                (
+                    false,
+                    Some("Не удалось изменить задачу (нужны права администратора)".into()),
+                )
             }
         }
         _ => (false, Some("Неизвестный тип элемента".into())),
@@ -439,7 +445,10 @@ pub fn delete(id: &str) -> (bool, Option<String>) {
             if run_schtasks(&["/delete", "/tn", &full, "/f"]) {
                 (true, None)
             } else {
-                (false, Some("Не удалось удалить задачу (нужны права администратора)".into()))
+                (
+                    false,
+                    Some("Не удалось удалить задачу (нужны права администратора)".into()),
+                )
             }
         }
         _ => (false, Some("Неизвестный тип элемента".into())),

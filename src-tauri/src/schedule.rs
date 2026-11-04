@@ -293,4 +293,3 @@ pub fn scheduled_clean(input: &[String]) -> CleanResult {
     });
     result
 }
-

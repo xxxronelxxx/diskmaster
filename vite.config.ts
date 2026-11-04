@@ -20,6 +20,12 @@ export default defineConfig({
     outDir: path.resolve(__dirname, "dist/client"),
     emptyOutDir: true,
     target: "chrome110",
+    rollupOptions: {
+      input: [
+        path.resolve(__dirname, "src/client/index.html"),
+        path.resolve(__dirname, "src/client/widget.html"),
+      ],
+    },
   },
   server: {
     port: 5173,

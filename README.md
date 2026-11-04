@@ -7,8 +7,9 @@
 нативный Rust, интерфейс рендерится системным **WebView2**. Итог: ~10 МБ вместо ~120 МБ,
 старт ~0,25 с, нет локального HTTP-сервера и нет фоновых процессов PowerShell.
 
-Метрики, список процессов, программы, автозагрузка, корзина и расписание работают через
-нативные Windows API (`sysinfo`, реестр, `schtasks`, `SHQueryRecycleBin`).
+Метрики, список процессов, программы, автозагрузка, корзина, расписание и виджет работают
+через нативные Windows API (`sysinfo`, реестр, `schtasks`, `SHQueryRecycleBin`, окно Tauri).
+Фоновых процессов PowerShell больше нет.
 
 ## Скачать
 
@@ -59,19 +60,19 @@ pnpm dev          # tauri dev: Vite + Rust, горячая перезагруз�
 src/client/        React + Tailwind UI, вкладки и компоненты
 src/client/api.ts  типизированный мост к Rust-командам (вместо oRPC)
 src/shared/        общий контракт данных UI ↔ Rust
-src-tauri/         Rust-бэкенд, конфиг Tauri, скрипты PowerShell
+src-tauri/         Rust-бэкенд и конфиг Tauri
   src/commands.rs  #[tauri::command] — вся поверхность IPC
   src/guard.rs     защита от удаления системных путей + allow-list
-  src/metrics.rs   сэмплер CPU/RAM/диска/сети (один PowerShell-процесс)
+  src/metrics.rs   сэмплер CPU/RAM/диска/сети на sysinfo
   src/scan.rs      категории мусора, большие файлы, очистка
   src/folders.rs   дерево папок
   src/duplicates.rs поиск дубликатов по SHA-256
   src/programs.rs  реестр установленных программ
   src/startup.rs   автозагрузка
   src/schedule.rs  Планировщик заданий Windows
-  src/widget.rs    WPF-виджет (отдельный процесс PowerShell)
+  src/widget.rs    нативное окно виджета (Tauri + Win32 z-order)
 scripts/           сборка, портативная версия, релиз, версия
-src-tauri/scripts/ metrics.ps1, monitor.ps1, startup.ps1
+
 ```
 
 ## Данные
@@ -89,6 +90,12 @@ src-tauri/scripts/ metrics.ps1, monitor.ps1, startup.ps1
 
 - `output/DiskMaster-portable-<версия>/` — распаковать и запустить, без установки.
 - NSIS-установщик — выбор папки, установка для текущего пользователя без UAC.
+
+## Что нового в 1.3.0
+
+- Виджет переведён с WPF/PowerShell на нативное окно Tauri: прозрачность, перетаскивание,
+  изменение размера, z-order и клики сквозь управляются через Win32.
+- PowerShell больше не используется приложением в фоне.
 
 ## Что нового в 1.2.0
 

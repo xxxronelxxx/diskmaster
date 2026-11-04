@@ -62,7 +62,11 @@ fn os_name() -> (String, String, String) {
     let ubr = reg_string(KEY, "UBR").unwrap_or_default();
 
     // Windows 11 still reports "Windows 10" in ProductName on some builds.
-    if build.parse::<u32>().map(|value| value >= 22000).unwrap_or(false) {
+    if build
+        .parse::<u32>()
+        .map(|value| value >= 22000)
+        .unwrap_or(false)
+    {
         product = product.replace("Windows 10", "Windows 11");
     }
 
@@ -116,7 +120,9 @@ pub fn collect() -> SystemInfo {
     let threads = std::thread::available_parallelism()
         .map(|value| value.get())
         .unwrap_or(0);
-    let cores = sys.physical_core_count().unwrap_or_else(|| (threads / 2).max(1));
+    let cores = sys
+        .physical_core_count()
+        .unwrap_or_else(|| (threads / 2).max(1));
 
     let (os, version, build) = os_name();
     let cpu = reg_string(

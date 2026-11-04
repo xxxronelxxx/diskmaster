@@ -85,13 +85,20 @@ fn derive_location(
     quiet_uninstall: Option<&str>,
 ) -> Option<String> {
     if let Some(location) = registered {
-        let trimmed = location.trim().trim_matches('"').trim().trim_end_matches(['\\', '/']);
+        let trimmed = location
+            .trim()
+            .trim_matches('"')
+            .trim()
+            .trim_end_matches(['\\', '/']);
         if !trimmed.is_empty() {
             return Some(trimmed.to_string());
         }
     }
 
-    for candidate in [display_icon, uninstall, quiet_uninstall].into_iter().flatten() {
+    for candidate in [display_icon, uninstall, quiet_uninstall]
+        .into_iter()
+        .flatten()
+    {
         let cleaned = candidate
             .trim()
             .trim_end_matches(|c: char| c.is_ascii_digit() || c == ',' || c == ' ')
@@ -134,8 +141,11 @@ fn read_hive(root: &RegKey, prefix: &str, path: &str, out: &mut Vec<InstalledPro
         if read_string(&key, "ParentKeyName").is_some() {
             continue;
         }
-        let release = read_string(&key, "ReleaseType").unwrap_or_default().to_lowercase();
-        if release.contains("update") || release.contains("hotfix") || release.contains("security") {
+        let release = read_string(&key, "ReleaseType")
+            .unwrap_or_default()
+            .to_lowercase();
+        if release.contains("update") || release.contains("hotfix") || release.contains("security")
+        {
             continue;
         }
 
@@ -171,7 +181,11 @@ fn load() -> Vec<InstalledProgram> {
     let user = RegKey::predef(HKEY_CURRENT_USER);
 
     for (prefix, path) in HIVES {
-        let root = if prefix.starts_with("HKLM") { &machine } else { &user };
+        let root = if prefix.starts_with("HKLM") {
+            &machine
+        } else {
+            &user
+        };
         read_hive(root, prefix, path, &mut items);
     }
 
@@ -193,7 +207,10 @@ pub fn list(shared: &AppState, force: bool) -> Vec<InstalledProgram> {
     let items = load();
     let elapsed = started.elapsed().as_millis();
     if elapsed > 400 {
-        crate::logging::log(&format!("programs list took {elapsed} ms ({} items)", items.len()));
+        crate::logging::log(&format!(
+            "programs list took {elapsed} ms ({} items)",
+            items.len()
+        ));
     }
 
     let mut guard = shared.programs.lock().unwrap();
@@ -214,7 +231,9 @@ fn find_guid(value: &str) -> Option<String> {
             if let Some(begin) = start {
                 let candidate = &value[begin..=index];
                 if candidate.len() == 38
-                    && candidate[1..].chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+                    && candidate[1..]
+                        .chars()
+                        .all(|c| c.is_ascii_hexdigit() || c == '-')
                 {
                     return Some(candidate.to_string());
                 }

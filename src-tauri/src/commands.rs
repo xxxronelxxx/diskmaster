@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{Manager, State};
 
-use crate::{
-    duplicates, folders, history, metrics, programs, scan, schedule, startup, system, widget, winget,
-};
 use crate::state::AppState;
 use crate::types::*;
+use crate::{
+    duplicates, folders, history, metrics, programs, scan, schedule, startup, system, widget,
+    winget,
+};
 
 type CmdResult<T> = Result<T, String>;
 
@@ -79,7 +80,14 @@ fn diagnostics_text(app: &tauri::AppHandle) -> String {
     let info = system::collect();
     let log = std::fs::read_to_string(crate::paths::storage_path(&["logs", "app.log"]))
         .unwrap_or_default();
-    let tail: Vec<&str> = log.lines().rev().take(50).collect::<Vec<_>>().into_iter().rev().collect();
+    let tail: Vec<&str> = log
+        .lines()
+        .rev()
+        .take(50)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
 
     format!(
         "Диск-Мастер {}
@@ -104,8 +112,10 @@ admin={}
         info.ram_total,
         info.ram_free,
         info.admin,
-        tail.join("
-")
+        tail.join(
+            "
+"
+        )
     )
 }
 
@@ -509,41 +519,84 @@ pub async fn history_capture() -> CmdResult<HistoryCaptureResult> {
 /* --------------------------------- widget --------------------------------- */
 
 #[tauri::command]
-pub async fn widget_info(state: State<'_, AppState>) -> CmdResult<WidgetStatus> {
-    let shared = state.inner().clone();
-    blocking(move || widget::status(&shared)).await
+pub async fn widget_info(app: tauri::AppHandle) -> CmdResult<WidgetStatus> {
+    Ok(widget::status(&app))
 }
 
 #[tauri::command]
 pub async fn widget_start(
-    state: State<'_, AppState>,
+    app: tauri::AppHandle,
     input: Option<serde_json::Value>,
 ) -> CmdResult<OkResult> {
-    let shared = state.inner().clone();
-    blocking(move || {
-        let (ok, error) = widget::launch(&shared, input);
-        OkResult { ok, error }
-    })
-    .await
+    let (ok, error) = widget::launch(&app, input);
+    Ok(OkResult { ok, error })
 }
 
 #[tauri::command]
-pub async fn widget_stop(state: State<'_, AppState>) -> CmdResult<OkResult> {
-    let shared = state.inner().clone();
-    blocking(move || OkResult {
-        ok: widget::stop(&shared),
+pub async fn widget_stop(app: tauri::AppHandle) -> CmdResult<OkResult> {
+    widget::stop(&app);
+    Ok(OkResult {
+        ok: true,
         error: None,
     })
-    .await
+}
+
+#[tauri::command]
+pub async fn widget_hide(app: tauri::AppHandle) -> CmdResult<OkResult> {
+    widget::stop(&app);
+    Ok(OkResult {
+        ok: true,
+        error: None,
+    })
+}
+
+#[tauri::command]
+pub fn show_main(app: tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
 }
 
 #[tauri::command]
 pub async fn widget_save(
-    state: State<'_, AppState>,
+    app: tauri::AppHandle,
     input: serde_json::Value,
 ) -> CmdResult<WidgetSettings> {
-    let _ = state;
-    blocking(move || widget::save_settings(&input)).await
+    let settings = widget::save_settings(&input);
+    widget::apply(&app, &settings);
+    Ok(settings)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidgetData {
+    settings: WidgetSettings,
+    latest: Option<MetricsSample>,
+    drives: Vec<DriveInfo>,
+    top: Option<ProcessInfo>,
+}
+
+#[tauri::command]
+pub async fn widget_data() -> CmdResult<WidgetData> {
+    blocking(|| {
+        let settings = widget::read_settings();
+        let (_, latest, _) = metrics::global().snapshot();
+        let drives = system::drives();
+        let top = if settings.show_top_process {
+            metrics::list_processes(1).into_iter().next()
+        } else {
+            None
+        };
+        WidgetData {
+            settings,
+            latest,
+            drives,
+            top,
+        }
+    })
+    .await
 }
 
 #[derive(Deserialize)]

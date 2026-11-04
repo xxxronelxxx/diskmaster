@@ -71,11 +71,15 @@ fn parse_table(output: &str) -> Vec<WingetUpdate> {
         if line.is_empty() {
             continue;
         }
-        if line.chars().all(|c| c == '-' || c == '–' || c == '—' || c.is_whitespace()) {
+        if line
+            .chars()
+            .all(|c| c == '-' || c == '–' || c == '—' || c.is_whitespace())
+        {
             continue;
         }
         let lower = line.to_lowercase();
-        if (lower.contains("пакет") || lower.contains("package")) && lower.contains("верси") {
+        if (lower.contains("пакет") || lower.contains("package")) && lower.contains("верси")
+        {
             continue;
         }
         if lower.starts_with("name ") || lower.starts_with("имя ") {
@@ -99,7 +103,11 @@ fn parse_table(output: &str) -> Vec<WingetUpdate> {
         {
             continue;
         }
-        let available_ok = available.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)
+        let available_ok = available
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_digit())
+            .unwrap_or(false)
             || available.eq_ignore_ascii_case("unknown")
             || available.eq_ignore_ascii_case("неизвестно")
             || available == "—"
@@ -115,7 +123,11 @@ fn parse_table(output: &str) -> Vec<WingetUpdate> {
         }
 
         rows.push(WingetUpdate {
-            name: if name.is_empty() { id.to_string() } else { name },
+            name: if name.is_empty() {
+                id.to_string()
+            } else {
+                name
+            },
             id: id.to_string(),
             current: current.to_string(),
             available: available.to_string(),
@@ -168,7 +180,9 @@ pub fn list(shared: &AppState, force: bool) -> WingetListing {
     listing.raw = Some(result.output.trim().chars().take(4000).collect());
 
     let lower = result.output.to_lowercase();
-    if listing.updates.is_empty() && (lower.contains("error") || lower.contains("failed") || lower.contains("не удалось")) {
+    if listing.updates.is_empty()
+        && (lower.contains("error") || lower.contains("failed") || lower.contains("не удалось"))
+    {
         listing.error = Some("Не удалось получить список обновлений winget".into());
     }
 
@@ -186,7 +200,10 @@ fn store(shared: &AppState, listing: &WingetListing) {
 pub fn upgrade(shared: &AppState, id: &str) -> (bool, String) {
     let listing = list(shared, false);
     if !listing.updates.iter().any(|update| update.id == id) {
-        return (false, "Пакет отсутствует в списке доступных обновлений".into());
+        return (
+            false,
+            "Пакет отсутствует в списке доступных обновлений".into(),
+        );
     }
 
     let result = run_winget(
