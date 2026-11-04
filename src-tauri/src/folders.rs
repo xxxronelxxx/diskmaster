@@ -176,7 +176,7 @@ pub fn analyze(shared: &AppState, target: Option<String>) -> FolderAnalysis {
         .collect();
 
     let mut entries: Vec<FolderEntry> = entries.into_iter().flatten().collect();
-    entries.sort_by(|a, b| b.size.cmp(&a.size));
+    entries.sort_by_key(|entry| std::cmp::Reverse(entry.size));
 
     result.size = entries.iter().map(|entry| entry.size).sum();
     result.files = entries.iter().map(|entry| entry.files).sum();
@@ -231,7 +231,7 @@ pub fn delete(shared: &AppState, paths: &[String], permanent: bool) -> DeleteRes
         } else {
             metadata.len()
         };
-        let files = if metadata.is_dir() { 1 } else { 1 };
+        let files = 1;
 
         if permanent {
             let removal = if metadata.is_dir() {

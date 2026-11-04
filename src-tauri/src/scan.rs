@@ -4,11 +4,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use serde::Deserialize;
 
 use crate::guard;
 use crate::paths::{home_dir, local_appdata, system_root};
-use crate::ps;
 use crate::state::AppState;
 use crate::types::{
     CleanCategoryResult, CleanResult, LargeFile, RecycleResult, ScanCategoryResult, ScanState,
@@ -461,7 +459,7 @@ fn run_scan(shared: AppState, threshold: u64) {
                     job.scan_path = current.to_string_lossy().to_string();
                     job.percent = percent.min(99.0) as u32;
                     let mut sorted = collected_ref.lock().unwrap().clone();
-                    sorted.sort_by(|a, b| b.size.cmp(&a.size));
+                    sorted.sort_by_key(|file| std::cmp::Reverse(file.size));
                     sorted.truncate(LARGE_FILE_LIMIT);
                     job.large_files = sorted;
                 }
@@ -477,7 +475,7 @@ fn run_scan(shared: AppState, threshold: u64) {
     }
 
     let mut all = collected.lock().unwrap().clone();
-    all.sort_by(|a, b| b.size.cmp(&a.size));
+    all.sort_by_key(|file| std::cmp::Reverse(file.size));
     let truncated = all.len() > LARGE_FILE_LIMIT;
     all.truncate(LARGE_FILE_LIMIT);
 
@@ -636,22 +634,34 @@ fn measure_category(
 /*                                  cleanup                                   */
 /* -------------------------------------------------------------------------- */
 
-#[derive(Deserialize)]
-struct RecycleInfo {
-    count: u64,
-    size: f64,
+fn recycle_bin_info() -> Option<(u64, u64)> {
+    use windows_sys::Win32::UI::Shell::{SHQueryRecycleBinW, SHQUERYRBINFO};
+
+    let mut info = SHQUERYRBINFO {
+        cbSize: std::mem::size_of::<SHQUERYRBINFO>() as u32,
+        i64Size: 0,
+        i64NumItems: 0,
+    };
+
+    let result = unsafe { SHQueryRecycleBinW(std::ptr::null(), &mut info) };
+    if result < 0 {
+        return None;
+    }
+
+    Some((
+        info.i64NumItems.max(0) as u64,
+        info.i64Size.max(0) as u64,
+    ))
 }
 
-fn recycle_bin_info() -> Option<(u64, u64)> {
-    let script = concat!(
-        "try { $shell = New-Object -ComObject Shell.Application; $bin = $shell.NameSpace(10); ",
-        "$items = @($bin.Items()); $size = [double]0; ",
-        "foreach ($i in $items) { try { $size += [double]$i.Size } catch {} }; ",
-        "[pscustomobject]@{ count = $items.Count; size = $size } | ConvertTo-Json -Compress ",
-        "} catch { [pscustomobject]@{ count = 0; size = 0 } | ConvertTo-Json -Compress }"
-    );
-    let info = ps::run_json::<RecycleInfo>(script, Duration::from_secs(30))?;
-    Some((info.count, info.size.max(0.0) as u64))
+fn empty_recycle_bin() -> bool {
+    use windows_sys::Win32::UI::Shell::{
+        SHEmptyRecycleBinW, SHERB_NOCONFIRMATION, SHERB_NOPROGRESSUI, SHERB_NOSOUND,
+    };
+
+    let flags = SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND;
+    let result = unsafe { SHEmptyRecycleBinW(std::ptr::null_mut(), std::ptr::null(), flags) };
+    result >= 0
 }
 
 fn dir_size(path: &Path) -> u64 {
@@ -685,17 +695,13 @@ pub fn clean_categories(ids: &[String]) -> CleanResult {
 
         if def.kind == "recycle-bin" {
             let info = recycle_bin_info();
-            let output = ps::run(
-                "Clear-RecycleBin -Force -ErrorAction SilentlyContinue",
-                Duration::from_secs(180),
-            );
-            if output.stderr.to_lowercase().contains("denied")
-                || output.stderr.contains("отказано")
-            {
+            if empty_recycle_bin() {
+                if let Some((count, size)) = info {
+                    category.bytes = size;
+                    category.files = count;
+                }
+            } else {
                 category.errors.push("Нет прав для очистки корзины".into());
-            } else if let Some((count, size)) = info {
-                category.bytes = size;
-                category.files = count;
             }
         } else if def.kind == "files" {
             for target in &def.paths {
@@ -889,8 +895,71 @@ pub fn category_ids() -> Vec<String> {
     categories().iter().map(|def| def.id.to_string()).collect()
 }
 
+/// Read-only size estimate used by the scheduled task before cleaning, so a
+/// threshold of "at least N MB" does not start a pointless run.
+pub fn estimate_bytes(ids: &[String]) -> u64 {
+    let definitions = categories();
+    let mut total = 0u64;
+
+    for def in definitions
+        .iter()
+        .filter(|def| ids.iter().any(|id| id == def.id))
+    {
+        if def.kind == "recycle-bin" {
+            if let Some((_, size)) = recycle_bin_info() {
+                total = total.saturating_add(size);
+            }
+            continue;
+        }
+        for target in &def.paths {
+            if !target.is_dir() {
+                continue;
+            }
+            let result = walk(
+                target,
+                None,
+                Duration::from_secs(4),
+                |_path, _meta| {},
+                |_files, _bytes, _current| {},
+            );
+            total = total.saturating_add(result.bytes);
+        }
+    }
+
+    total
+}
+
 pub fn _quiet_rayon() {
     // Keep the rayon dependency used so the walker can be parallelised later
     // without touching Cargo.toml.
     let _ = rayon::current_num_threads();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recycle_bin_query_is_available() {
+        assert!(recycle_bin_info().is_some());
+    }
+
+    #[test]
+    fn large_file_skips_system_entries() {
+        assert!(is_skipped_large_file(
+            Path::new(r"C:\Windows\System32\pagefile.sys"),
+            false,
+            Path::new(r"C:\")
+        ));
+        assert!(is_skipped_large_file(
+            Path::new(r"D:\$RECYCLE.BIN\file.bin"),
+            false,
+            Path::new(r"D:\")
+        ));
+        assert!(!is_skipped_large_file(
+            Path::new(r"C:\Users\me\video.mp4"),
+            true,
+            Path::new(r"C:\Users\me")
+        ));
+    }
 }

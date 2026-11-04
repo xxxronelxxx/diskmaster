@@ -1,14 +1,15 @@
 use std::fs;
+use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::process::Command;
 
 use crate::paths::storage_path;
-use crate::ps;
 use crate::scan::clean_categories;
 use crate::types::{CleanResult, ScheduleConfig, ScheduleRun, ScheduleStatus};
 
 const TASK_NAME: &str = "DiskMasterAutoClean";
 const TASK_PATH: &str = "\\DiskMaster\\";
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 fn config_file() -> PathBuf {
     storage_path(&["schedule", "config.json"])
@@ -69,6 +70,23 @@ fn runner() -> PathBuf {
     std::env::current_exe().unwrap_or_else(|_| PathBuf::from("DiskMaster.exe"))
 }
 
+fn task_full_name() -> String {
+    format!("{TASK_PATH}{TASK_NAME}")
+}
+
+fn schtasks_run(args: &[&str]) -> (bool, String) {
+    let mut command = Command::new("schtasks.exe");
+    command.args(args).creation_flags(CREATE_NO_WINDOW);
+    match command.output() {
+        Ok(output) => {
+            let mut text = String::from_utf8_lossy(&output.stdout).to_string();
+            text.push_str(&String::from_utf8_lossy(&output.stderr));
+            (output.status.success(), text)
+        }
+        Err(error) => (false, error.to_string()),
+    }
+}
+
 fn register_task(config: &ScheduleConfig) -> (bool, Option<String>) {
     let start_time = if config.time.len() == 5 && config.time.as_bytes().get(2) == Some(&b':') {
         config.time.clone()
@@ -76,75 +94,73 @@ fn register_task(config: &ScheduleConfig) -> (bool, Option<String>) {
         "12:00".into()
     };
     let categories = config.categories.join(",");
-    let args = format!(
-        "--run-scheduled-clean --categories={categories} --threshold={}",
+    let task_command = format!(
+        "\"{}\" --run-scheduled-clean --categories={categories} --threshold={}",
+        runner().to_string_lossy(),
         config.threshold_mb
     );
-    let exe = runner();
-    let work_dir = exe
-        .parent()
-        .map(|path| path.to_string_lossy().to_string())
-        .unwrap_or_default();
-    let log = log_file();
-    let command = format!(
-        "\"{}\" {} >> \"{}\" 2>&1",
-        exe.to_string_lossy(),
-        args,
-        log.to_string_lossy()
-    );
 
-    let days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    let trigger = match config.frequency.as_str() {
-        "daily" => format!("New-ScheduledTaskTrigger -Daily -At '{}'", start_time),
-        "monthly" => format!("New-ScheduledTaskTrigger -Monthly -DaysOfMonth 1 -At '{}'", start_time),
-        "logon" => "New-ScheduledTaskTrigger -AtLogOn".to_string(),
+    let days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+    let mut args: Vec<String> = vec![
+        "/create".into(),
+        "/tn".into(),
+        task_full_name(),
+        "/tr".into(),
+        task_command,
+        "/f".into(),
+    ];
+
+    match config.frequency.as_str() {
+        "daily" => {
+            args.extend(["/sc".into(), "DAILY".into(), "/st".into(), start_time]);
+        }
+        "monthly" => {
+            args.extend([
+                "/sc".into(),
+                "MONTHLY".into(),
+                "/d".into(),
+                "1".into(),
+                "/st".into(),
+                start_time,
+            ]);
+        }
+        "logon" => {
+            args.extend(["/sc".into(), "ONLOGON".into()]);
+        }
         _ => {
             let day = days[(config.day_of_week as usize).min(6)];
-            format!(
-                "New-ScheduledTaskTrigger -Weekly -DaysOfWeek {} -At '{}'",
-                day, start_time
-            )
+            args.extend([
+                "/sc".into(),
+                "WEEKLY".into(),
+                "/d".into(),
+                day.into(),
+                "/st".into(),
+                start_time,
+            ]);
         }
-    };
-
-    let script = format!(
-        "$ErrorActionPreference = 'Stop'; try {{ \
-         $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument {} -WorkingDirectory {}; \
-         $trigger = {trigger}; \
-         $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries \
-         -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 2); \
-         Register-ScheduledTask -TaskName '{}' -TaskPath '{}' -Action $action -Trigger $trigger \
-         -Settings $settings -Description 'Автоматическая очистка диска (Диск-Мастер)' -Force | Out-Null; \
-         Write-Output 'ok' }} catch {{ Write-Output ('ERR ' + $_.Exception.Message) }}",
-        ps::quote(&format!("/c {command}")),
-        ps::quote(&work_dir),
-        TASK_NAME,
-        TASK_PATH
-    );
-
-    let output = ps::run(&script, Duration::from_secs(60));
-    if output.stdout.contains("ok") {
-        (true, None)
-    } else {
-        let message = output.stdout.replace("ERR", "").trim().to_string();
-        let lower = message.to_lowercase();
-        let friendly = if lower.contains("denied") || message.contains("отказано") {
-            "Для создания задания в планировщике нужны права администратора".to_string()
-        } else if message.is_empty() {
-            "Не удалось создать задание в планировщике".to_string()
-        } else {
-            message.chars().take(300).collect()
-        };
-        (false, Some(friendly))
     }
+
+    let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    let (ok, output) = schtasks_run(&refs);
+    if ok {
+        return (true, None);
+    }
+
+    let lower = output.to_lowercase();
+    let message = if lower.contains("denied")
+        || lower.contains("access is denied")
+        || output.contains("отказано")
+    {
+        "Для создания задания в планировщике нужны права администратора".to_string()
+    } else {
+        "Не удалось создать задание в планировщике".to_string()
+    };
+    (false, Some(message))
 }
 
 fn unregister_task() {
-    let script = format!(
-        "Unregister-ScheduledTask -TaskName '{TASK_NAME}' -TaskPath '{}' -Confirm:$false -ErrorAction SilentlyContinue",
-        TASK_PATH
-    );
-    ps::run(&script, Duration::from_secs(30));
+    let full = task_full_name();
+    let _ = schtasks_run(&["/delete", "/tn", &full, "/f"]);
 }
 
 pub fn save(config: &ScheduleConfig) -> (ScheduleConfig, bool, Option<String>) {
@@ -169,20 +185,29 @@ pub fn save(config: &ScheduleConfig) -> (ScheduleConfig, bool, Option<String>) {
 
 pub fn status() -> ScheduleStatus {
     let config = read_config();
-    let script = format!(
-        "$task = Get-ScheduledTask -TaskName '{TASK_NAME}' -TaskPath '{}' -ErrorAction SilentlyContinue; \
-         if ($task) {{ $info = Get-ScheduledTaskInfo -TaskName '{TASK_NAME}' -TaskPath '{}' -ErrorAction SilentlyContinue; \
-         if ($info -and $info.NextRunTime) {{ Write-Output ('yes|' + $info.NextRunTime.ToString('o')) }} else {{ Write-Output 'yes|' }} }} \
-         else {{ Write-Output 'no|' }}",
-        TASK_PATH, TASK_PATH
-    );
-    let output = ps::run(&script, Duration::from_secs(30));
-    let text = output.stdout.trim();
-    let (flag, next) = text.split_once('|').unwrap_or(("no", ""));
+    let full = task_full_name();
+    let (ok, text) = schtasks_run(&["/query", "/tn", &full, "/fo", "CSV", "/v"]);
+
+    if !ok {
+        return ScheduleStatus {
+            config,
+            registered: false,
+            next_run: None,
+        };
+    }
+
+    let row = text.lines().nth(1).map(crate::startup::parse_csv_line);
+    let next_run = row.as_ref().and_then(|fields| {
+        fields
+            .get(2)
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty() && value != "N/A")
+    });
+
     ScheduleStatus {
         config,
-        registered: flag == "yes",
-        next_run: if next.is_empty() { None } else { Some(next.to_string()) },
+        registered: true,
+        next_run,
     }
 }
 
@@ -229,6 +254,33 @@ pub fn scheduled_clean(input: &[String]) -> CleanResult {
             categories: Vec::new(),
             errors: vec!["Не выбраны категории".into()],
         };
+    }
+
+    let threshold_bytes = config.threshold_mb.saturating_mul(1024 * 1024);
+    if threshold_bytes > 0 {
+        let available = crate::scan::estimate_bytes(&categories);
+        if available < threshold_bytes {
+            append_run(&ScheduleRun {
+                at: chrono::Utc::now().timestamp_millis(),
+                freed_bytes: 0,
+                files: 0,
+                categories: categories.clone(),
+                trigger: "scheduled".into(),
+            });
+            crate::logging::log(&format!(
+                "scheduled clean skipped: {available} bytes below threshold {threshold_bytes}"
+            ));
+            return CleanResult {
+                freed_bytes: 0,
+                deleted_files: 0,
+                categories: Vec::new(),
+                errors: vec![format!(
+                    "Порог не достигнут: найдено {} МБ из {} МБ",
+                    available / (1024 * 1024),
+                    config.threshold_mb
+                )],
+            };
+        }
     }
 
     let result = clean_categories(&categories);

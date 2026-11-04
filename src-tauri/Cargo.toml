@@ -1,6 +1,6 @@
 [package]
 name = "disk-master"
-version = "1.1.2"
+version = "1.2.0"
 description = "Очистка диска, анализ места и мониторинг Windows"
 authors = ["Development SPB"]
 edition = "2021"
@@ -16,10 +16,11 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sysinfo = "0.33"
+sysinfo = { version = "0.33", default-features = false, features = ["system", "disk", "network", "multithread"] }
 walkdir = "2"
 rayon = "1"
 sha2 = "0.10"
+blake3 = "1"
 trash = "5"
 winreg = "0.55"
 windows-sys = { version = "0.59", features = [
@@ -30,6 +31,7 @@ windows-sys = { version = "0.59", features = [
   "Win32_UI_Shell",
 ] }
 chrono = "0.4"
+arboard = "3"
 base64 = "0.22"
 jwalk = "0.8"
 wait-timeout = "0.2"

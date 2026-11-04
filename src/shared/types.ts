@@ -58,7 +58,7 @@ export type ProcessInfo = {
   pid: number;
   name: string;
   memory: number;
-  cpuSeconds: number;
+  cpuPercent: number;
   path: string | null;
 };
 
@@ -179,6 +179,15 @@ export type DuplicateGroup = {
   count: number;
   wasted: number;
   files: DuplicateFile[];
+};
+
+export type DuplicateProgress = {
+  phase: string;
+  scanned: number;
+  hashed: number;
+  total: number;
+  percent: number;
+  cancelled: boolean;
 };
 
 export type DuplicateScan = {

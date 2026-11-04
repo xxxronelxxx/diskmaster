@@ -37,11 +37,25 @@ if (!exe) {
   throw new Error("release executable not found — expected src-tauri/target/release/DiskMaster.exe");
 }
 
-rmSync(target, { recursive: true, force: true });
-mkdirSync(target, { recursive: true });
+try {
+  rmSync(target, { recursive: true, force: true });
+  mkdirSync(target, { recursive: true });
+} catch (error) {
+  throw new Error(
+    `Не удалось обновить папку ${target}. Закройте запущенный DiskMaster.exe и повторите.
+${String(error)}`,
+  );
+}
 
 const destination = path.join(target, "DiskMaster.exe");
-copyFileSync(exe, destination);
+try {
+  copyFileSync(exe, destination);
+} catch (error) {
+  throw new Error(
+    `Не удалось скопировать DiskMaster.exe — возможно, приложение запущено.
+${String(error)}`,
+  );
+}
 writeFileSync(path.join(target, "portable.marker"), "", "utf8");
 writeFileSync(
   path.join(target, "README.txt"),

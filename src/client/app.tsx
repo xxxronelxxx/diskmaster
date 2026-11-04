@@ -28,6 +28,7 @@ import { ScheduleTab } from "./components/tab-schedule";
 import { HistoryTab } from "./components/tab-history";
 import { WidgetTab } from "./components/tab-widget";
 import { UpdateBanner } from "./components/update-banner";
+import { AboutModal } from "./components/about-modal";
 import { useUpdater } from "./lib/updater";
 
 type TabId =
@@ -88,6 +89,7 @@ function App() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [theme, setTheme] = useState<Theme>(() => initTheme());
   const refreshedFor = useRef<string | null>(null);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const updater = useUpdater();
 
   function toggleTheme() {
@@ -206,6 +208,13 @@ function App() {
             ) : (
               <div className="h-20 animate-pulse rounded-xl bg-white/[0.03]" />
             )}
+
+            <button
+              onClick={() => setAboutOpen(true)}
+              className="w-full rounded-xl border border-white/[0.07] bg-white/[0.02] px-3 py-2 text-left text-[11px] text-slate-400 transition-colors hover:bg-white/[0.05] hover:text-slate-200"
+            >
+              О программе · v{updater.version || "…"}
+            </button>
           </div>
         </aside>
 
@@ -234,9 +243,13 @@ function App() {
                     {updater.notice}
                   </span>
                 ) : null}
-                <span className="hidden items-center rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-[10px] font-medium tabular-nums text-slate-500 sm:flex">
+                <button
+                  onClick={() => setAboutOpen(true)}
+                  className="hidden items-center rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-[10px] font-medium tabular-nums text-slate-500 transition-colors hover:bg-white/[0.07] hover:text-slate-200 sm:flex"
+                  title="О программе"
+                >
                   v{updater.version || "…"}
-                </span>
+                </button>
                 <button
                   onClick={() => void updater.checkNow()}
                   disabled={updater.status === "checking" || updater.status === "downloading"}
@@ -344,6 +357,13 @@ function App() {
           </div>
         </main>
       </div>
+
+      <AboutModal
+        open={aboutOpen}
+        onClose={() => setAboutOpen(false)}
+        info={info}
+        updater={updater}
+      />
     </div>
   );
 }

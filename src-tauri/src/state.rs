@@ -16,20 +16,11 @@ pub struct UpdateCache {
     pub listing: WingetListing,
 }
 
+#[derive(Default)]
 pub struct WidgetRuntime {
     pub child: Option<Child>,
     pub last_error: Option<String>,
     pub settings: Option<WidgetSettings>,
-}
-
-impl Default for WidgetRuntime {
-    fn default() -> Self {
-        Self {
-            child: None,
-            last_error: None,
-            settings: None,
-        }
-    }
 }
 
 #[derive(Clone)]

@@ -12,6 +12,7 @@
  */
 import { execSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { zipSync } from "fflate";
 import {
   copyFileSync,
   existsSync,
@@ -112,9 +113,16 @@ writeFileSync(
 
 const portableZip = path.join(outputDir, `DiskMaster-portable-${version}.zip`);
 rmSync(portableZip, { force: true });
-execSync(
-  `powershell -NoProfile -Command "Compress-Archive -Path '${portableDir}\\*' -DestinationPath '${portableZip}' -Force"`,
-  { stdio: "inherit", cwd: root },
+writeFileSync(
+  portableZip,
+  zipSync(
+    {
+      "DiskMaster.exe": readFileSync(path.join(portableDir, "DiskMaster.exe")),
+      "README.txt": readFileSync(path.join(portableDir, "README.txt")),
+      "portable.marker": new Uint8Array(),
+    },
+    { level: 6 },
+  ),
 );
 
 const sha256 = (file: string) =>

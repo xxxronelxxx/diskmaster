@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   CleanResult,
   DeleteResult,
+  DuplicateProgress,
   DuplicateScan,
   FolderAnalysis,
   HistorySummary,
@@ -67,6 +68,8 @@ export const api = {
 
   duplicatesScan: (input?: { root?: string; minSizeKb?: number }) => invoke<DuplicateScan>("duplicates_scan", payload(input)),
   duplicatesLast: () => invoke<DuplicateScan | null>("duplicates_last"),
+  duplicatesStatus: () => invoke<DuplicateProgress | null>("duplicates_status"),
+  duplicatesCancel: () => invoke<void>("duplicates_cancel"),
 
   programs: (input?: { refresh?: boolean }) => invoke<InstalledProgram[]>("programs", payload(input)),
   uninstall: (input: { key: string; quiet?: boolean }) => invoke<UninstallResult>("uninstall", { input }),
@@ -127,6 +130,8 @@ export const queryClient = {
 
     duplicatesScan: { mutationOptions: mutation<{ root?: string; minSizeKb?: number } | undefined, DuplicateScan>("duplicates_scan") },
     duplicatesLast: { queryOptions: () => query<DuplicateScan | null>("duplicates_last") },
+    duplicatesStatus: { queryOptions: () => query<DuplicateProgress | null>("duplicates_status") },
+    duplicatesCancel: { mutationOptions: mutation<Record<string, never> | undefined, void>("duplicates_cancel") },
 
     programs: { queryOptions: (opts?: { input?: { refresh?: boolean } }) => query<InstalledProgram[]>("programs", opts) },
     uninstall: { mutationOptions: mutation<{ key: string; quiet?: boolean }, UninstallResult>("uninstall") },

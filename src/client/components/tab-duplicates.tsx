@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type { DuplicateGroup, DuplicateScan } from "@/shared/types";
 import { queryClient, rpcClient } from "@/client/rpc-client";
 import { formatBytes, formatCount, formatDate } from "@/client/lib/format";
-import { Badge, Button, Card, EmptyState, Modal, SectionTitle } from "./ui";
+import { Badge, Button, Card, EmptyState, Modal, Progress, SectionTitle } from "./ui";
 import { AlertIcon, CheckIcon, FilesIcon, RefreshIcon, TrashIcon } from "./icons";
 
 const MIN_SIZES = [16, 64, 256, 1024];
@@ -17,7 +17,15 @@ export function DuplicatesTab() {
   const [note, setNote] = useState<string | null>(null);
 
   const scanMutation = useMutation(queryClient.system.duplicatesScan.mutationOptions());
+  const cancelMutation = useMutation(queryClient.system.duplicatesCancel.mutationOptions());
   const deleteMutation = useMutation(queryClient.system.folderDelete.mutationOptions());
+
+  const progressQuery = useQuery({
+    ...queryClient.system.duplicatesStatus.queryOptions(),
+    enabled: scanMutation.isPending,
+    refetchInterval: scanMutation.isPending ? 500 : false,
+  });
+  const progress = progressQuery.data;
 
   const groups = useMemo(() => {
     if (!scan) return [];
@@ -37,6 +45,7 @@ export function DuplicatesTab() {
     setRemoved(new Set());
     setKeepFirst(new Set());
     const result = (await scanMutation.mutateAsync({ minSizeKb: minSize })) as DuplicateScan;
+    if (result.error) setNote(result.error);
     setScan(result);
   }
 
@@ -86,14 +95,40 @@ export function DuplicatesTab() {
     <div className="space-y-5">
       <SectionTitle
         title="Дубликаты"
-        subtitle="Поиск одинаковых файлов по содержимому (SHA-256), а не по имени"
+        subtitle="Поиск одинаковых файлов по содержимому (BLAKE3), а не по имени"
         action={
-          <Button variant="primary" onClick={runScan} loading={scanMutation.isPending}>
-            <RefreshIcon className="size-4" />
-            {scan ? "Сканировать снова" : "Найти дубликаты"}
-          </Button>
+          scanMutation.isPending ? (
+            <Button variant="danger" onClick={() => void cancelMutation.mutateAsync({})}>
+              Остановить
+            </Button>
+          ) : (
+            <Button variant="primary" onClick={runScan}>
+              <RefreshIcon className="size-4" />
+              {scan ? "Сканировать снова" : "Найти дубликаты"}
+            </Button>
+          )
         }
       />
+
+      {scanMutation.isPending && progress ? (
+        <Card className="p-4">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-xs text-slate-300">
+              {progress.phase === "hashing"
+                ? "Считаем хэши файлов…"
+                : "Обходим файлы и группируем по размеру…"}
+            </p>
+            <span className="text-[11px] tabular-nums text-slate-400">{progress.percent}%</span>
+          </div>
+          <Progress value={progress.percent} className="mt-2" />
+          <p className="mt-2 text-[11px] text-slate-500">
+            просмотрено {formatCount(progress.scanned)} файлов
+            {progress.total > 0
+              ? ` · проверено ${formatCount(progress.hashed)} из ${formatCount(progress.total)}`
+              : ""}
+          </p>
+        </Card>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-slate-500">Минимальный размер файла:</span>

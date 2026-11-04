@@ -24,11 +24,6 @@ pub struct PsOutput {
     pub timed_out: bool,
 }
 
-/// Escapes a value for safe use inside single quotes in PowerShell.
-pub fn quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "''"))
-}
-
 fn encoded(script: &str) -> String {
     let full = format!("{PRELUDE}; {script}");
     let utf16: Vec<u16> = full.encode_utf16().collect();
@@ -52,25 +47,6 @@ pub fn spawn(script: &str) -> std::io::Result<Child> {
         ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .creation_flags(CREATE_NO_WINDOW)
-        .spawn()
-}
-
-/// Long-lived sampler: stderr is discarded because PowerShell writes CLIXML
-/// progress records there, and an undrained pipe would block the process.
-pub fn spawn_stream(script: &str) -> std::io::Result<Child> {
-    Command::new("powershell.exe")
-        .args([
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-EncodedCommand",
-            &encoded(script),
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
         .creation_flags(CREATE_NO_WINDOW)
         .spawn()
 }
@@ -138,23 +114,4 @@ pub fn run(script: &str, timeout: Duration) -> PsOutput {
     result
 }
 
-pub fn run_json<T: serde::de::DeserializeOwned>(script: &str, timeout: Duration) -> Option<T> {
-    let result = run(script, timeout);
-    let raw = result.stdout.trim();
-    if raw.is_empty() {
-        return None;
-    }
-    if let Ok(value) = serde_json::from_str::<T>(raw) {
-        return Some(value);
-    }
-
-    // Fall back to the first balanced JSON document in the output.
-    let start = raw.find(['{', '['])?;
-    for end in (start + 1..=raw.len()).rev() {
-        if let Ok(value) = serde_json::from_str::<T>(&raw[start..end]) {
-            return Some(value);
-        }
-    }
-    None
-}
 

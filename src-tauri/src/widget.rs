@@ -309,3 +309,41 @@ pub fn status(shared: &AppState) -> WidgetStatus {
 }
 
 fn _child_type(_: &Child) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clamps_out_of_range_settings() {
+        let settings = WidgetSettings {
+            width: 99_999,
+            height: 1,
+            opacity: 5.0,
+            radius: 500,
+            font_scale: 0.1,
+            interval_ms: 50,
+            accent: "red".into(),
+            z_mode: "hacked".into(),
+            x: -50_000,
+            ..WidgetSettings::default()
+        };
+        let clamped = clamp_settings(settings);
+        assert_eq!(clamped.width, 1200);
+        assert_eq!(clamped.height, 120);
+        assert_eq!(clamped.opacity, 1.0);
+        assert_eq!(clamped.radius, 40);
+        assert_eq!(clamped.font_scale, 0.7);
+        assert_eq!(clamped.interval_ms, 500);
+        assert_eq!(clamped.accent, "#38e0a0");
+        assert_eq!(clamped.z_mode, "normal");
+        assert_eq!(clamped.x, -1);
+    }
+
+    #[test]
+    fn accepts_valid_accent() {
+        assert!(valid_accent("#38e0a0"));
+        assert!(!valid_accent("#38e0a"));
+        assert!(!valid_accent("38e0a0"));
+    }
+}

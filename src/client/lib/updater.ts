@@ -18,10 +18,16 @@ export type Updater = {
   progress: number;
   notice: string | null;
   version: string;
+  portable: boolean;
   checkNow: (manual?: boolean) => Promise<void>;
   install: () => Promise<void>;
   dismiss: () => void;
+  skipVersion: () => void;
 };
+
+const SKIPPED_KEY = "diskmaster.skippedVersion";
+const LAST_CHECK_KEY = "diskmaster.lastUpdateCheck";
+const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 type AppInfo = { version: string; portable: boolean };
 
@@ -35,7 +41,11 @@ export function useUpdater(): Updater {
   const [progress, setProgress] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [version, setVersion] = useState("");
+  const [portable, setPortable] = useState(false);
   const portableRef = useRef(false);
+  const skippedRef = useRef<string | null>(
+    typeof localStorage === "undefined" ? null : localStorage.getItem(SKIPPED_KEY),
+  );
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const flash = useCallback((text: string) => {
@@ -55,9 +65,16 @@ export function useUpdater(): Updater {
       setStatus("checking");
       try {
         const found = await check();
+        localStorage.setItem(LAST_CHECK_KEY, String(Date.now()));
+
         if (found) {
-          setUpdate(found);
-          setStatus("available");
+          if (!manual && skippedRef.current === found.version) {
+            setUpdate(null);
+            setStatus("idle");
+          } else {
+            setUpdate(found);
+            setStatus("available");
+          }
         } else {
           setUpdate(null);
           setStatus("current");
@@ -86,6 +103,7 @@ export function useUpdater(): Updater {
         const info = await invoke<AppInfo>("app_info");
         if (cancelled) return;
         setVersion(info.version);
+        setPortable(info.portable);
         portableRef.current = info.portable;
         if (info.portable) {
           setStatus("portable");
@@ -93,10 +111,13 @@ export function useUpdater(): Updater {
         }
         if (import.meta.env.DEV) return;
 
-        // Automatic, silent check shortly after the window is usable.
-        startupTimer = setTimeout(() => {
-          if (!cancelled) void checkNow(false);
-        }, 900);
+        // Automatic check at most once per 24 hours.
+        const last = Number(localStorage.getItem(LAST_CHECK_KEY) ?? 0);
+        if (Date.now() - last > CHECK_INTERVAL_MS) {
+          startupTimer = setTimeout(() => {
+            if (!cancelled) void checkNow(false);
+          }, 900);
+        }
       } catch {
         /* app_info is always available in a real build */
       }
@@ -143,5 +164,30 @@ export function useUpdater(): Updater {
     setStatus("idle");
   }, []);
 
-  return { status, update, progress, notice, version, checkNow, install, dismiss };
+  const skipVersion = useCallback(() => {
+    if (!update) return;
+    localStorage.setItem(SKIPPED_KEY, update.version);
+    skippedRef.current = update.version;
+    setUpdate(null);
+    setStatus("idle");
+  }, [update]);
+
+  // Keep checking while the app stays open for days.
+  useEffect(() => {
+    const timer = setInterval(() => void checkNow(false), CHECK_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [checkNow]);
+
+  return {
+    status,
+    update,
+    progress,
+    notice,
+    version,
+    portable,
+    checkNow,
+    install,
+    dismiss,
+    skipVersion,
+  };
 }

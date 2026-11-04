@@ -64,7 +64,7 @@ pub struct ProcessInfo {
     pub pid: u32,
     pub name: String,
     pub memory: u64,
-    pub cpu_seconds: f64,
+    pub cpu_percent: f64,
     pub path: Option<String>,
 }
 
@@ -201,6 +201,17 @@ pub struct DuplicateGroup {
     pub count: u64,
     pub wasted: u64,
     pub files: Vec<DuplicateFile>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateProgress {
+    pub phase: String,
+    pub scanned: u64,
+    pub hashed: u64,
+    pub total: u64,
+    pub percent: u32,
+    pub cancelled: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

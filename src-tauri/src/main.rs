@@ -257,6 +257,10 @@ fn main() {
             commands::portable_mode,
             commands::app_info,
             commands::open_releases,
+            commands::open_url,
+            commands::open_logs,
+            commands::diagnostics,
+            commands::copy_diagnostics,
             commands::overview,
             commands::metrics,
             commands::kill_process,
@@ -270,6 +274,8 @@ fn main() {
             commands::folder_delete,
             commands::duplicates_scan,
             commands::duplicates_last,
+            commands::duplicates_status,
+            commands::duplicates_cancel,
             commands::programs,
             commands::uninstall,
             commands::updates,
@@ -343,6 +349,7 @@ fn main() {
             }
 
             build_tray(app.handle())?;
+            metrics::cleanup_legacy_samplers();
             widget::migrate_autostart();
             history::start_sampler();
             logging::log("window setup complete");

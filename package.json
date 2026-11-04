@@ -1,7 +1,7 @@
 {
   "name": "disk-master",
   "private": true,
-  "version": "1.1.2",
+  "version": "1.2.0",
   "type": "module",
   "scripts": {
     "dev": "tauri dev",
@@ -35,6 +35,7 @@
     "eslint": "^9",
     "eslint-plugin-react-hooks": "^7",
     "eslint-plugin-react-refresh": "^0.4.20",
+    "fflate": "^0.8.3",
     "globals": "^16.3.0",
     "tailwindcss": "^4.1.18",
     "tsx": "^4.20.0",

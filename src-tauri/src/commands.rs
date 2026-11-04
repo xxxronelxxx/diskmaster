@@ -41,14 +41,84 @@ pub fn app_info(app: tauri::AppHandle) -> AppInfo {
     }
 }
 
-#[tauri::command]
-pub fn open_releases() -> Result<(), String> {
-    const URL: &str = "https://github.com/xxxronelxxx/diskmaster/releases/latest";
+const REPO_URL: &str = "https://github.com/xxxronelxxx/diskmaster";
+
+fn open_url_internal(url: &str) -> Result<(), String> {
     std::process::Command::new("rundll32.exe")
-        .args(["url.dll,FileProtocolHandler", URL])
+        .args(["url.dll,FileProtocolHandler", url])
         .spawn()
         .map(|_| ())
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn open_releases() -> Result<(), String> {
+    open_url_internal(&format!("{REPO_URL}/releases/latest"))
+}
+
+#[tauri::command]
+pub fn open_url(url: String) -> Result<(), String> {
+    if !url.starts_with(REPO_URL) {
+        return Err("Недопустимый адрес".into());
+    }
+    open_url_internal(&url)
+}
+
+#[tauri::command]
+pub fn open_logs() -> Result<(), String> {
+    let dir = crate::paths::storage_path(&["logs"]);
+    let _ = std::fs::create_dir_all(&dir);
+    std::process::Command::new("explorer.exe")
+        .arg(&dir)
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+fn diagnostics_text(app: &tauri::AppHandle) -> String {
+    let info = system::collect();
+    let log = std::fs::read_to_string(crate::paths::storage_path(&["logs", "app.log"]))
+        .unwrap_or_default();
+    let tail: Vec<&str> = log.lines().rev().take(50).collect::<Vec<_>>().into_iter().rev().collect();
+
+    format!(
+        "Диск-Мастер {}
+portable={}
+data={}
+OS={} {} ({})
+CPU={} / {} ядер, {} потоков
+RAM={} / {}
+admin={}
+
+Журнал:
+{}",
+        app.package_info().version,
+        crate::paths::is_portable(),
+        crate::paths::storage_root().display(),
+        info.os,
+        info.version,
+        info.build,
+        info.cpu,
+        info.cores,
+        info.threads,
+        info.ram_total,
+        info.ram_free,
+        info.admin,
+        tail.join("
+")
+    )
+}
+
+#[tauri::command]
+pub fn diagnostics(app: tauri::AppHandle) -> String {
+    diagnostics_text(&app)
+}
+
+#[tauri::command]
+pub fn copy_diagnostics(app: tauri::AppHandle) -> Result<(), String> {
+    let text = diagnostics_text(&app);
+    let mut clipboard = arboard::Clipboard::new().map_err(|error| error.to_string())?;
+    clipboard.set_text(text).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -237,6 +307,16 @@ pub async fn duplicates_scan(
 #[tauri::command]
 pub async fn duplicates_last(state: State<'_, AppState>) -> CmdResult<Option<DuplicateScan>> {
     Ok(duplicates::last_scan(state.inner()))
+}
+
+#[tauri::command]
+pub fn duplicates_status(state: State<'_, AppState>) -> Option<DuplicateProgress> {
+    duplicates::progress(state.inner())
+}
+
+#[tauri::command]
+pub fn duplicates_cancel(state: State<'_, AppState>) {
+    duplicates::cancel(state.inner());
 }
 
 /* -------------------------------- programs -------------------------------- */

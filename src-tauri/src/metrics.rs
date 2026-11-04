@@ -1,31 +1,13 @@
-use std::process::Child;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use serde::Deserialize;
+use sysinfo::{Disks, Networks, Pid, ProcessesToUpdate, System};
 
-use crate::ps;
 use crate::types::{MetricsSample, MetricsState, ProcessInfo};
 
 const HISTORY_SIZE: usize = 240;
 pub const SAMPLE_INTERVAL_MS: u64 = 1000;
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RawSample {
-    t: f64,
-    cpu: f64,
-    #[serde(default)]
-    cores: Vec<f64>,
-    ram_used: f64,
-    ram_total: f64,
-    disk_read: f64,
-    disk_write: f64,
-    net_in: f64,
-    net_out: f64,
-    net_adapter: Option<String>,
-}
 
 #[derive(Default)]
 struct Store {
@@ -35,7 +17,6 @@ struct Store {
 
 pub struct MetricsHandle {
     store: Arc<Mutex<Store>>,
-    child: Arc<Mutex<Option<Child>>>,
     running: Arc<AtomicBool>,
 }
 
@@ -43,7 +24,6 @@ impl MetricsHandle {
     pub fn start() -> Self {
         let handle = Self {
             store: Arc::new(Mutex::new(Store::default())),
-            child: Arc::new(Mutex::new(None)),
             running: Arc::new(AtomicBool::new(false)),
         };
         handle.spawn_sampler();
@@ -56,88 +36,83 @@ impl MetricsHandle {
         }
 
         let store = Arc::clone(&self.store);
-        let child_slot = Arc::clone(&self.child);
         let running = Arc::clone(&self.running);
-        let script = include_str!("../scripts/metrics.ps1");
 
         std::thread::spawn(move || {
-            let mut restarts = 0;
+            let mut system = System::new();
+            let mut disks = Disks::new_with_refreshed_list();
+            let mut networks = Networks::new_with_refreshed_list();
+
+            // The first CPU refresh has no previous values to compare with.
+            system.refresh_cpu_usage();
+            system.refresh_memory();
+            let mut last = Instant::now();
+
             while running.load(Ordering::SeqCst) {
-                let mut child = match ps::spawn_stream(script) {
-                    Ok(child) => child,
-                    Err(error) => {
-                        store.lock().unwrap().error = Some(error.to_string());
-                        break;
+                std::thread::sleep(Duration::from_millis(SAMPLE_INTERVAL_MS));
+
+                let elapsed = last.elapsed().as_secs_f64().max(0.1);
+                last = Instant::now();
+
+                system.refresh_cpu_usage();
+                system.refresh_memory();
+                disks.refresh(true);
+                networks.refresh(true);
+
+                let cpu = system.global_cpu_usage() as f64;
+                let cores: Vec<f64> = system
+                    .cpus()
+                    .iter()
+                    .map(|core| (core.cpu_usage().round() as f64).clamp(0.0, 100.0))
+                    .collect();
+
+                let mut read_bytes = 0u64;
+                let mut written_bytes = 0u64;
+                for disk in disks.list() {
+                    let usage = disk.usage();
+                    read_bytes = read_bytes.saturating_add(usage.read_bytes);
+                    written_bytes = written_bytes.saturating_add(usage.written_bytes);
+                }
+
+                let mut net_in = 0f64;
+                let mut net_out = 0f64;
+                let mut adapter: Option<String> = None;
+                let mut best = -1f64;
+                for (name, data) in networks.iter() {
+                    let received = data.received() as f64 / elapsed;
+                    let transmitted = data.transmitted() as f64 / elapsed;
+                    net_in += received;
+                    net_out += transmitted;
+                    let total = received + transmitted;
+                    if total > best {
+                        best = total;
+                        adapter = Some(name.clone());
                     }
+                }
+
+                let ram_total = system.total_memory();
+                let ram_used = system.used_memory();
+
+                let sample = MetricsSample {
+                    t: chrono::Utc::now().timestamp_millis(),
+                    cpu: (cpu * 10.0).round() / 10.0,
+                    cores,
+                    ram_used,
+                    ram_total,
+                    disk_read: read_bytes as f64 / elapsed,
+                    disk_write: written_bytes as f64 / elapsed,
+                    net_in,
+                    net_out,
+                    net_adapter: adapter,
                 };
 
-                let stdout = child.stdout.take();
-                *child_slot.lock().unwrap() = Some(child);
-
-                if let Some(stdout) = stdout {
-                    use std::io::BufRead;
-                    let mut reader = std::io::BufReader::new(stdout);
-                    let mut buffer = Vec::new();
-                    loop {
-                        buffer.clear();
-                        match reader.read_until(b'\n', &mut buffer) {
-                            Ok(0) => break,
-                            Ok(_) => {}
-                            Err(_) => break,
-                        }
-                        if !running.load(Ordering::SeqCst) {
-                            break;
-                        }
-                        let line = String::from_utf8_lossy(&buffer);
-                        let trimmed = line.trim();
-                        if !trimmed.starts_with('{') {
-                            continue;
-                        }
-                        let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) else {
-                            continue;
-                        };
-                        if let Some(message) = value.get("error").and_then(|v| v.as_str()) {
-                            store.lock().unwrap().error = Some(message.to_string());
-                            continue;
-                        }
-                        let Ok(raw) = serde_json::from_value::<RawSample>(value) else {
-                            continue;
-                        };
-                        restarts = 0;
-                        let sample = MetricsSample {
-                            t: raw.t as i64,
-                            cpu: (raw.cpu * 10.0).round() / 10.0,
-                            cores: raw.cores,
-                            ram_used: raw.ram_used.max(0.0) as u64,
-                            ram_total: raw.ram_total.max(0.0) as u64,
-                            disk_read: raw.disk_read.max(0.0),
-                            disk_write: raw.disk_write.max(0.0),
-                            net_in: raw.net_in.max(0.0),
-                            net_out: raw.net_out.max(0.0),
-                            net_adapter: raw.net_adapter,
-                        };
-                        let mut guard = store.lock().unwrap();
-                        guard.error = None;
-                        guard.history.push(sample);
-                        if guard.history.len() > HISTORY_SIZE {
-                            let cut = guard.history.len() - HISTORY_SIZE;
-                            guard.history.drain(0..cut);
-                        }
-                    }
+                let mut guard = store.lock().unwrap();
+                guard.error = None;
+                guard.history.push(sample);
+                if guard.history.len() > HISTORY_SIZE {
+                    let cut = guard.history.len() - HISTORY_SIZE;
+                    guard.history.drain(0..cut);
                 }
-
-                *child_slot.lock().unwrap() = None;
-                if !running.load(Ordering::SeqCst) {
-                    break;
-                }
-                restarts += 1;
-                if restarts > 4 {
-                    store.lock().unwrap().error =
-                        Some("Сборщик метрик остановлен после нескольких сбоев".into());
-                    running.store(false, Ordering::SeqCst);
-                    break;
-                }
-                std::thread::sleep(Duration::from_secs(2));
             }
         });
     }
@@ -153,10 +128,6 @@ impl MetricsHandle {
 
     pub fn stop(&self) {
         self.running.store(false, Ordering::SeqCst);
-        if let Some(mut child) = self.child.lock().unwrap().take() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
     }
 }
 
@@ -164,51 +135,56 @@ impl MetricsHandle {
 /*                                 processes                                  */
 /* -------------------------------------------------------------------------- */
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RawProcess {
-    pid: u32,
-    name: String,
-    memory: f64,
-    cpu_seconds: f64,
-    path: Option<String>,
+struct ProcessCache {
+    at: Instant,
+    items: Vec<ProcessInfo>,
 }
 
-static PROCESS_CACHE: Mutex<Option<(Instant, Vec<ProcessInfo>)>> = Mutex::new(None);
-
-const PROCESS_SCRIPT: &str = concat!(
-    "$items = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.WorkingSet64 -gt 0 } | ",
-    "Sort-Object WorkingSet64 -Descending | Select-Object -First 30 | ForEach-Object { ",
-    "[pscustomobject]@{ pid = $_.Id; name = $_.ProcessName; memory = [double]$_.WorkingSet64; ",
-    "cpuSeconds = if ($_.CPU) { [double]$_.CPU } else { 0 }; path = if ($_.Path) { [string]$_.Path } else { $null } } }; ",
-    "ConvertTo-Json -InputObject @($items) -Depth 3 -Compress"
-);
+static PROCESS_CACHE: Mutex<Option<ProcessCache>> = Mutex::new(None);
 
 pub fn list_processes(limit: usize) -> Vec<ProcessInfo> {
     {
         let guard = PROCESS_CACHE.lock().unwrap();
-        if let Some((at, items)) = guard.as_ref() {
-            if at.elapsed() < Duration::from_secs(5) {
-                return items.iter().take(limit).cloned().collect();
+        if let Some(cache) = guard.as_ref() {
+            if cache.at.elapsed() < Duration::from_secs(4) {
+                return cache.items.iter().take(limit).cloned().collect();
             }
         }
     }
 
-    let data = ps::run_json::<Vec<RawProcess>>(PROCESS_SCRIPT, Duration::from_secs(25));
-    let items: Vec<ProcessInfo> = data
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|item| !item.name.is_empty())
-        .map(|item| ProcessInfo {
-            pid: item.pid,
-            name: item.name,
-            memory: item.memory.max(0.0) as u64,
-            cpu_seconds: item.cpu_seconds,
-            path: item.path,
+    let mut system = System::new();
+    system.refresh_processes(ProcessesToUpdate::All, true);
+
+    let mut items: Vec<ProcessInfo> = system
+        .processes()
+        .values()
+        .filter(|process| process.memory() > 0)
+        .map(|process| ProcessInfo {
+            pid: process.pid().as_u32(),
+            name: {
+                let raw = process.name().to_string_lossy().to_string();
+                if raw.to_lowercase().ends_with(".exe") {
+                    raw[..raw.len() - 4].to_string()
+                } else {
+                    raw
+                }
+            },
+            memory: process.memory(),
+            cpu_percent: (process.cpu_usage() as f64 * 10.0).round() / 10.0,
+            path: process
+                .exe()
+                .map(|path| path.to_string_lossy().to_string()),
         })
         .collect();
 
-    *PROCESS_CACHE.lock().unwrap() = Some((Instant::now(), items.clone()));
+    items.sort_by_key(|item| std::cmp::Reverse(item.memory));
+    items.truncate(40);
+
+    *PROCESS_CACHE.lock().unwrap() = Some(ProcessCache {
+        at: Instant::now(),
+        items: items.clone(),
+    });
+
     items.into_iter().take(limit).collect()
 }
 
@@ -219,32 +195,24 @@ pub fn kill_process(pid: u32) -> (bool, Option<String>) {
     if pid == std::process::id() {
         return (false, Some("Нельзя завершить собственный процесс".into()));
     }
-    // Only processes the user could actually see in the list are killable.
     if !list_processes(40).iter().any(|item| item.pid == pid) {
         return (false, Some("Процесс отсутствует в списке активных".into()));
     }
 
-    let script = format!(
-        "try {{ Stop-Process -Id {pid} -Force -ErrorAction Stop; \
-         [pscustomobject]@{{ ok = $true }} | ConvertTo-Json -Compress }} catch {{ \
-         [pscustomobject]@{{ ok = $false; error = [string]$_.Exception.Message }} | ConvertTo-Json -Compress }}"
-    );
-    let result = ps::run_json::<serde_json::Value>(&script, Duration::from_secs(20));
-    *PROCESS_CACHE.lock().unwrap() = None;
+    let mut system = System::new();
+    system.refresh_processes(ProcessesToUpdate::All, true);
+    let target = Pid::from_u32(pid);
 
-    match result {
-        Some(value) if value.get("ok").and_then(|v| v.as_bool()) == Some(true) => (true, None),
-        Some(value) => (
-            false,
-            Some(
-                value
-                    .get("error")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("Не удалось завершить процесс")
-                    .to_string(),
-            ),
-        ),
-        None => (false, Some("Не удалось завершить процесс (нужны права)".into())),
+    match system.process(target) {
+        Some(process) => {
+            if process.kill() {
+                *PROCESS_CACHE.lock().unwrap() = None;
+                (true, None)
+            } else {
+                (false, Some("Не удалось завершить процесс (нужны права)".into()))
+            }
+        }
+        None => (false, Some("Процесс уже завершён".into())),
     }
 }
 
@@ -252,8 +220,7 @@ pub fn state(processes: Vec<ProcessInfo>) -> MetricsState {
     let handle = global();
     let (mut history, latest, error) = handle.snapshot();
 
-    // Per-core values are only needed for the latest sample. Dropping them
-    // from history keeps the 1.5 s poll small (240 samples × 16 cores).
+    // Per-core values are only needed for the latest sample.
     let latest_cores = latest
         .as_ref()
         .map(|sample| sample.cores.clone())
@@ -269,7 +236,7 @@ pub fn state(processes: Vec<ProcessInfo>) -> MetricsState {
         history,
         latest,
         interval_ms: SAMPLE_INTERVAL_MS,
-        error: if cfg!(windows) { error } else { Some("Мониторинг доступен только в Windows".into()) },
+        error,
         processes,
     }
 }
@@ -282,6 +249,50 @@ pub fn global() -> Arc<MetricsHandle> {
         *guard = Some(Arc::new(MetricsHandle::start()));
     }
     Arc::clone(guard.as_ref().unwrap())
+}
+
+/// Older builds kept a PowerShell sampler alive for the whole session. The
+/// installer terminates the app without letting it stop the child, so upgrades
+/// leave an orphaned `powershell.exe` behind. This runs once (marker file) and
+/// stops exactly those processes: encoded script contains our old metrics
+/// markers and the parent process is already gone.
+pub fn cleanup_legacy_samplers() -> usize {
+    let marker = crate::paths::storage_path(&["legacy-samplers-cleanup.done"]);
+    if marker.exists() {
+        return 0;
+    }
+
+    let script = r#"
+$killed = 0
+$procs = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'powershell.exe' -and $_.CommandLine -like '*-EncodedCommand*' }
+foreach ($p in $procs) {
+  $parentAlive = $false
+  try { $parentAlive = [bool](Get-Process -Id $p.ParentProcessId -ErrorAction Stop) } catch {}
+  if ($parentAlive) { continue }
+  $parts = $p.CommandLine -split ' '
+  $index = [Array]::IndexOf($parts, '-EncodedCommand')
+  if ($index -lt 0 -or $index + 1 -ge $parts.Length) { continue }
+  try {
+    $bytes = [Convert]::FromBase64String($parts[$index + 1])
+    $text = [Text.Encoding]::Unicode.GetString($bytes)
+  } catch { continue }
+  if ($text -like '*Win32_PerfFormattedData_PerfOS_Processor*' -and $text -like '*prevDiskR*') {
+    Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
+    $killed += 1
+  }
+}
+Write-Output $killed
+"#;
+
+    let output = crate::ps::run(script, Duration::from_secs(30));
+    crate::paths::ensure_parent(&marker);
+    let _ = std::fs::write(&marker, b"done");
+
+    let stopped: usize = output.stdout.trim().parse().unwrap_or(0);
+    if stopped > 0 {
+        crate::logging::log(&format!("stopped {stopped} legacy metrics sampler(s)"));
+    }
+    stopped
 }
 
 pub fn stop_global() {

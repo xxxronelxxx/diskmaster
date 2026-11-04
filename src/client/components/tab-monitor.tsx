@@ -241,7 +241,7 @@ export function MonitorTab() {
                       <p className="text-sm font-semibold tabular-nums text-white">
                         {formatBytes(process.memory, 0)}
                       </p>
-                      <p className="text-[10px] text-slate-500">{formatCount(Math.round(process.cpuSeconds))} с CPU</p>
+                      <p className="text-[10px] text-slate-500">{process.cpuPercent.toFixed(1).replace(".", ",")}% CPU</p>
                     </div>
                     <button
                       onClick={() => setPendingKill(process)}

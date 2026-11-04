@@ -7,7 +7,7 @@ import { SparkleIcon } from "./icons";
  * verified by the Tauri updater plugin before the installer runs.
  */
 export function UpdateBanner({ updater }: { updater: Updater }) {
-  const { update, status, progress, install, dismiss } = updater;
+  const { update, status, progress, install, dismiss, skipVersion } = updater;
   if (!update) return null;
 
   return (
@@ -36,6 +36,15 @@ export function UpdateBanner({ updater }: { updater: Updater }) {
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={skipVersion}
+          disabled={status === "downloading"}
+          title="Не предлагать эту версию до следующего релиза"
+        >
+          Пропустить версию
+        </Button>
         <Button variant="ghost" size="sm" onClick={dismiss} disabled={status === "downloading"}>
           Позже
         </Button>

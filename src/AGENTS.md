@@ -30,9 +30,11 @@ cd src-tauri && cargo clippy -- -D warnings
 - Destructive operations must validate paths with
   `guard::assert_deletable` (protected system paths, drive/profile roots,
   symlinks, allow-list from scan/analysis results).
-- PowerShell is allowed for Windows integrations that are expensive to reimplement
-  (widget, Task Scheduler, winget, program inventory). Do not put PowerShell on
-  the metrics hot path: `metrics.ps1` is one long-lived process, read line by line.
+- Metrics/processes use `sysinfo`; programs and startup use `winreg`; the recycle
+  bin uses `SHQueryRecycleBin`; the scheduler uses `schtasks`. Do not reintroduce
+  PowerShell for these paths.
+- The WPF widget is the only remaining PowerShell process until it is ported to a
+  native Tauri window (planned for 1.3.0).
 - Widget script `src-tauri/scripts/monitor.ps1` is embedded with `include_str!` and
   written to `%LOCALAPPDATA%\DiskMaster\widget` at runtime. Keep it BOM+CRLF.
 - Version lives in `package.json`; run `pnpm version:sync` before builds (the
