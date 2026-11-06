@@ -1,10 +1,23 @@
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use sysinfo::{Disks, Networks, Pid, ProcessesToUpdate, System};
+use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+use windows_sys::Win32::System::Threading::{
+    OpenProcess, SetPriorityClass, ABOVE_NORMAL_PRIORITY_CLASS, BELOW_NORMAL_PRIORITY_CLASS,
+    HIGH_PRIORITY_CLASS, IDLE_PRIORITY_CLASS, NORMAL_PRIORITY_CLASS, PROCESS_SET_INFORMATION,
+    PROCESS_SUSPEND_RESUME,
+};
 
 use crate::types::{MetricsSample, MetricsState, ProcessInfo};
+
+#[link(name = "ntdll")]
+extern "system" {
+    fn NtSuspendProcess(process: HANDLE) -> i32;
+    fn NtResumeProcess(process: HANDLE) -> i32;
+}
 
 const HISTORY_SIZE: usize = 240;
 pub const SAMPLE_INTERVAL_MS: u64 = 1000;
@@ -141,6 +154,50 @@ struct ProcessCache {
 }
 
 static PROCESS_CACHE: Mutex<Option<ProcessCache>> = Mutex::new(None);
+static SUSPENDED: Mutex<Option<HashSet<u32>>> = Mutex::new(None);
+
+/// Processes that must never be suspended or reprioritized: doing so can hang
+/// the session or the whole system.
+const CRITICAL_PROCESSES: &[&str] = &[
+    "system",
+    "registry",
+    "smss",
+    "csrss",
+    "wininit",
+    "winlogon",
+    "services",
+    "lsass",
+    "svchost",
+    "dwm",
+    "fontdrvhost",
+    "memcompression",
+];
+
+fn process_name(pid: u32) -> Option<String> {
+    let mut system = System::new();
+    system.refresh_processes(ProcessesToUpdate::All, true);
+    system
+        .process(Pid::from_u32(pid))
+        .map(|process| process.name().to_string_lossy().to_lowercase())
+}
+
+fn blocked_reason(pid: u32) -> Option<String> {
+    if pid <= 4 {
+        return Some("Недопустимый идентификатор процесса".into());
+    }
+    if pid == std::process::id() {
+        return Some("Нельзя управлять собственным процессом".into());
+    }
+    if let Some(name) = process_name(pid) {
+        if CRITICAL_PROCESSES
+            .iter()
+            .any(|critical| name == *critical || name == format!("{critical}.exe"))
+        {
+            return Some(format!("Системный процесс {name} защищён"));
+        }
+    }
+    None
+}
 
 pub fn list_processes(limit: usize) -> Vec<ProcessInfo> {
     {
@@ -154,6 +211,7 @@ pub fn list_processes(limit: usize) -> Vec<ProcessInfo> {
 
     let mut system = System::new();
     system.refresh_processes(ProcessesToUpdate::All, true);
+    let suspended_now = SUSPENDED.lock().unwrap().clone().unwrap_or_default();
 
     let mut items: Vec<ProcessInfo> = system
         .processes()
@@ -172,6 +230,7 @@ pub fn list_processes(limit: usize) -> Vec<ProcessInfo> {
             memory: process.memory(),
             cpu_percent: (process.cpu_usage() as f64 * 10.0).round() / 10.0,
             path: process.exe().map(|path| path.to_string_lossy().to_string()),
+            suspended: suspended_now.contains(&process.pid().as_u32()),
         })
         .collect();
 
@@ -215,6 +274,84 @@ pub fn kill_process(pid: u32) -> (bool, Option<String>) {
         }
         None => (false, Some("Процесс уже завершён".into())),
     }
+}
+
+fn priority_class(level: &str) -> u32 {
+    match level {
+        "idle" => IDLE_PRIORITY_CLASS,
+        "below" => BELOW_NORMAL_PRIORITY_CLASS,
+        "above" => ABOVE_NORMAL_PRIORITY_CLASS,
+        "high" => HIGH_PRIORITY_CLASS,
+        _ => NORMAL_PRIORITY_CLASS,
+    }
+}
+
+pub fn set_priority(pid: u32, level: &str) -> (bool, Option<String>) {
+    if let Some(reason) = blocked_reason(pid) {
+        return (false, Some(reason));
+    }
+    if !matches!(level, "idle" | "below" | "normal" | "above" | "high") {
+        return (false, Some("Неизвестный уровень приоритета".into()));
+    }
+
+    let handle = unsafe { OpenProcess(PROCESS_SET_INFORMATION, 0, pid) };
+    if handle.is_null() {
+        return (
+            false,
+            Some("Не удалось открыть процесс — нужны права администратора".into()),
+        );
+    }
+    let ok = unsafe { SetPriorityClass(handle, priority_class(level)) } != 0;
+    let error = if ok {
+        None
+    } else {
+        Some(format!(
+            "Не удалось изменить приоритет: {}",
+            std::io::Error::last_os_error()
+        ))
+    };
+    unsafe { CloseHandle(handle) };
+    (ok, error)
+}
+
+pub fn set_suspended(pid: u32, suspend: bool) -> (bool, Option<String>) {
+    if let Some(reason) = blocked_reason(pid) {
+        return (false, Some(reason));
+    }
+
+    let handle = unsafe { OpenProcess(PROCESS_SUSPEND_RESUME, 0, pid) };
+    if handle.is_null() {
+        return (
+            false,
+            Some("Не удалось открыть процесс — нужны права администратора".into()),
+        );
+    }
+    let status = unsafe {
+        if suspend {
+            NtSuspendProcess(handle)
+        } else {
+            NtResumeProcess(handle)
+        }
+    };
+    unsafe { CloseHandle(handle) };
+
+    if status != 0 {
+        return (
+            false,
+            Some(format!("Системная ошибка 0x{:X}", status as u32)),
+        );
+    }
+
+    let mut guard = SUSPENDED.lock().unwrap();
+    let set = guard.get_or_insert_with(HashSet::new);
+    if suspend {
+        set.insert(pid);
+    } else {
+        set.remove(&pid);
+    }
+    drop(guard);
+    *PROCESS_CACHE.lock().unwrap() = None;
+    (true, None)
 }
 
 pub fn state(processes: Vec<ProcessInfo>) -> MetricsState {

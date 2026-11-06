@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { ScanState } from "@/shared/types";
+import { api } from "./api";
 import { queryClient } from "./rpc-client";
 import { formatBytes } from "./lib/format";
 import { applyTheme, initTheme, type Theme } from "./lib/theme";
@@ -10,6 +12,7 @@ import {
   MoonIcon,
   PackageIcon,
   RefreshIcon,
+  SettingsIcon,
   ShieldIcon,
   SparkleIcon,
   SunIcon,
@@ -27,6 +30,7 @@ import { StartupTab } from "./components/tab-startup";
 import { ScheduleTab } from "./components/tab-schedule";
 import { HistoryTab } from "./components/tab-history";
 import { MaintenanceTab } from "./components/tab-maintenance";
+import { SettingsTab } from "./components/tab-settings";
 import { WidgetTab } from "./components/tab-widget";
 import { UpdateBanner } from "./components/update-banner";
 import { AboutModal } from "./components/about-modal";
@@ -45,7 +49,8 @@ type TabId =
   | "schedule"
   | "history"
   | "maintenance"
-  | "widget";
+  | "widget"
+  | "settings";
 
 type TabDef = {
   id: TabId;
@@ -68,6 +73,7 @@ const TABS: TabDef[] = [
   { id: "startup", label: "Автозагрузка", icon: SparkleIcon, group: "Программы" },
   { id: "schedule", label: "Расписание", icon: RefreshIcon, group: "Автоматизация" },
   { id: "widget", label: "Виджет", icon: GaugeIcon, group: "Автоматизация" },
+  { id: "settings", label: "Настройки", icon: SettingsIcon, group: "Автоматизация" },
 ];
 
 const GROUPS = ["Система", "Освободить место", "Программы", "Автоматизация"];
@@ -94,6 +100,17 @@ function App() {
   const refreshedFor = useRef<string | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const updater = useUpdater();
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen("open-settings", () => setTab("settings")).then((fn) => {
+      unlisten = fn;
+    });
+    void api.initialTab().then((value) => {
+      if (value && TABS.some((item) => item.id === value)) setTab(value as TabId);
+    });
+    return () => unlisten?.();
+  }, []);
 
   function toggleTheme() {
     const next: Theme = theme === "dark" ? "light" : "dark";
@@ -358,6 +375,7 @@ function App() {
             {tab === "startup" ? <StartupTab /> : null}
             {tab === "schedule" ? <ScheduleTab categories={categories} /> : null}
             {tab === "widget" ? <WidgetTab /> : null}
+            {tab === "settings" ? <SettingsTab /> : null}
           </div>
         </main>
       </div>

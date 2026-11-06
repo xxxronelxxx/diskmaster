@@ -15,6 +15,7 @@ mod paths;
 mod programs;
 mod scan;
 mod schedule;
+mod settings;
 mod startup;
 mod state;
 mod system;
@@ -29,7 +30,9 @@ use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use serde::{Deserialize, Serialize};
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, WindowEvent};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tauri_plugin_notification::NotificationExt;
 use winreg::enums::{HKEY_CURRENT_USER, KEY_READ, KEY_WRITE};
 use winreg::RegKey;
 
@@ -49,7 +52,7 @@ fn show_main(app: &AppHandle) {
     }
 }
 
-fn autostart_enabled() -> bool {
+pub fn autostart_enabled() -> bool {
     RegKey::predef(HKEY_CURRENT_USER)
         .open_subkey_with_flags(AUTOSTART_KEY, KEY_READ)
         .ok()
@@ -57,7 +60,7 @@ fn autostart_enabled() -> bool {
         .is_some()
 }
 
-fn set_autostart(enabled: bool) {
+pub fn set_autostart(enabled: bool) {
     let Ok(key) = RegKey::predef(HKEY_CURRENT_USER)
         .open_subkey_with_flags(AUTOSTART_KEY, KEY_READ | KEY_WRITE)
     else {
@@ -70,6 +73,113 @@ fn set_autostart(enabled: bool) {
     } else {
         let _ = key.delete_value(AUTOSTART_NAME);
     }
+}
+
+fn format_gb(bytes: u64) -> String {
+    format!("{:.1} ГБ", bytes as f64 / 1024f64.powi(3))
+}
+
+fn notify(app: &AppHandle, title: &str, body: &str) {
+    let _ = app.notification().builder().title(title).body(body).show();
+}
+
+fn toggle_widget(app: &AppHandle) {
+    if widget::is_running(app) {
+        widget::stop(app);
+    } else {
+        let _ = widget::launch(app, None);
+    }
+}
+
+/// Re-registers the global hotkeys from the current settings. Returns the
+/// shortcuts that could not be registered.
+pub fn apply_hotkeys(app: &AppHandle) -> Vec<String> {
+    let settings = settings::current();
+    let shortcuts = app.global_shortcut();
+    let _ = shortcuts.unregister_all();
+    let mut errors = Vec::new();
+
+    if !settings.hotkey_show.is_empty() {
+        let accelerator = settings.hotkey_show.clone();
+        if let Err(error) = shortcuts.on_shortcut(accelerator.as_str(), |app, _, event| {
+            if event.state() == ShortcutState::Pressed {
+                logging::log("hotkey: show");
+                show_main(app);
+            }
+        }) {
+            errors.push(format!("{accelerator}: {error}"));
+        }
+    }
+
+    if !settings.hotkey_widget.is_empty() {
+        let accelerator = settings.hotkey_widget.clone();
+        if let Err(error) = shortcuts.on_shortcut(accelerator.as_str(), |app, _, event| {
+            if event.state() == ShortcutState::Pressed {
+                logging::log("hotkey: widget");
+                toggle_widget(app);
+            }
+        }) {
+            errors.push(format!("{accelerator}: {error}"));
+        }
+    }
+
+    errors
+}
+
+/// Watches free space on fixed drives and raises a toast when a drive drops
+/// below the configured threshold. Cooldown prevents repeated toasts.
+fn start_disk_watch(app: AppHandle) {
+    std::thread::spawn(move || {
+        let mut last: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(180));
+            let settings = settings::current();
+            if !settings.notify_low_disk {
+                continue;
+            }
+            let now = chrono::Utc::now().timestamp();
+            let mut low = false;
+            for drive in system::drives() {
+                if drive.total == 0 {
+                    continue;
+                }
+                let free_percent = drive.free as f64 / drive.total as f64 * 100.0;
+                if free_percent >= settings.low_disk_percent as f64 {
+                    continue;
+                }
+                low = true;
+                if let Some(tray) = app.tray_by_id("main-tray") {
+                    let _ = tray.set_tooltip(Some(format!(
+                        "Мало места на {}: свободно {}",
+                        drive.letter,
+                        format_gb(drive.free)
+                    )));
+                }
+                let cooldown = (settings.low_disk_cooldown_min.max(5) as i64) * 60;
+                let previous = last.get(&drive.letter).copied().unwrap_or(0);
+                if now - previous < cooldown {
+                    continue;
+                }
+                last.insert(drive.letter.clone(), now);
+                notify(
+                    &app,
+                    "Мало свободного места",
+                    &format!(
+                        "{}: свободно {} из {} ({}%). Откройте «Очистку», чтобы освободить место.",
+                        drive.letter,
+                        format_gb(drive.free),
+                        format_gb(drive.total),
+                        free_percent.round() as u32
+                    ),
+                );
+            }
+            if !low {
+                if let Some(tray) = app.tray_by_id("main-tray") {
+                    let _ = tray.set_tooltip(Some("Диск-Мастер — очистка и мониторинг"));
+                }
+            }
+        }
+    });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -143,6 +253,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let portable = paths::is_portable();
     let open = MenuItem::with_id(app, "open", "Открыть Диск-Мастер", true, None::<&str>)?;
     let widget = MenuItem::with_id(app, "widget", "Показать/скрыть виджет", true, None::<&str>)?;
+    let quick = MenuItem::with_id(app, "quick-clean", "Быстрая очистка", true, None::<&str>)?;
     let snapshot = MenuItem::with_id(
         app,
         "snapshot",
@@ -150,6 +261,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         true,
         None::<&str>,
     )?;
+    let settings = MenuItem::with_id(app, "settings", "Настройки", true, None::<&str>)?;
     let autostart = CheckMenuItem::with_id(
         app,
         "autostart",
@@ -172,8 +284,10 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &open,
             &separator,
             &widget,
+            &quick,
             &snapshot,
             &separator2,
+            &settings,
             &autostart,
             &quit,
         ],
@@ -201,12 +315,45 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open" => show_main(app),
-            "widget" => {
-                if widget::is_running(app) {
-                    widget::stop(app);
-                } else {
-                    let _ = widget::launch(app, None);
-                }
+            "widget" => toggle_widget(app),
+            "quick-clean" => {
+                let app = app.clone();
+                std::thread::spawn(move || {
+                    let ids: Vec<String> = [
+                        "user-temp",
+                        "thumbnails",
+                        "inet-cache",
+                        "dx-cache",
+                        "crash-dumps",
+                    ]
+                    .iter()
+                    .map(|value| (*value).to_string())
+                    .collect();
+                    let result = scan::clean_categories(&ids);
+                    crate::clean_history::record(
+                        "clean",
+                        "quick",
+                        &ids,
+                        result.freed_bytes,
+                        result.deleted_files,
+                        &result.errors,
+                    );
+                    if settings::current().quick_clean_notify {
+                        notify(
+                            &app,
+                            "Быстрая очистка завершена",
+                            &format!(
+                                "Освобождено {} · {} файлов",
+                                format_gb(result.freed_bytes),
+                                result.deleted_files
+                            ),
+                        );
+                    }
+                });
+            }
+            "settings" => {
+                show_main(app);
+                let _ = app.emit("open-settings", ());
             }
             "snapshot" => {
                 let _ = history::capture();
@@ -276,6 +423,15 @@ fn main() {
         return;
     }
 
+    let initial_tab = arg_value("tab").or_else(|| {
+        std::env::args()
+            .any(|value| value == "--settings")
+            .then(|| "settings".to_string())
+    });
+    if let Some(tab) = initial_tab {
+        *commands::INITIAL_TAB.lock().unwrap() = Some(tab);
+    }
+
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             let wants_widget = argv.iter().any(|value| value == "--widget");
@@ -290,6 +446,8 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             commands::portable_mode,
@@ -305,9 +463,19 @@ fn main() {
             commands::start_scan,
             commands::scan_status,
             commands::clean_junk,
+            commands::clean_dry_run,
             commands::preview_clean,
             commands::clean_history,
             commands::write_text_file,
+            commands::settings_state,
+            commands::settings_save,
+            commands::settings_export,
+            commands::settings_import,
+            commands::autostart_set,
+            commands::notification_test,
+            commands::process_priority,
+            commands::process_suspend,
+            commands::initial_tab,
             commands::maintenance_status,
             commands::system_operation,
             commands::delete_large_files,
@@ -397,6 +565,19 @@ fn main() {
             build_tray(app.handle())?;
             widget::migrate_autostart();
 
+            settings::init();
+            let hotkey_errors = apply_hotkeys(app.handle());
+            if hotkey_errors.is_empty() {
+                let current = settings::current();
+                logging::log(&format!(
+                    "hotkeys registered: {} / {}",
+                    current.hotkey_show, current.hotkey_widget
+                ));
+            } else {
+                logging::log(&format!("hotkeys failed: {}", hotkey_errors.join("; ")));
+            }
+            start_disk_watch(app.handle().clone());
+
             if std::env::args().any(|value| value == "--widget") {
                 let _ = widget::launch(app.handle(), None);
             }
@@ -445,9 +626,14 @@ fn main() {
                     if QUITTING.load(Ordering::SeqCst) {
                         return;
                     }
-                    api.prevent_close();
-                    save_window_state(window, true);
-                    let _ = window.hide();
+                    if settings::current().minimize_to_tray {
+                        api.prevent_close();
+                        save_window_state(window, true);
+                        let _ = window.hide();
+                    } else {
+                        QUITTING.store(true, Ordering::SeqCst);
+                        window.app_handle().exit(0);
+                    }
                 }
                 WindowEvent::Moved(_) => {
                     save_window_state(window, false);

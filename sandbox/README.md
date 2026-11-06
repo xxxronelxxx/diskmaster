@@ -23,6 +23,9 @@ machine.
 | `test-destructive.wsb` + `destructive.ps1` | Fake `Windows.old`, restore points, system categories, DISM |
 | `test-ui.wsb` + `ui.ps1` | Opens the maintenance tab via UI Automation |
 | `test-ui2.wsb` + `ui2.ps1` | Creates a restore point through the modal and loads the list |
+| `test-ui3.wsb` + `ui3.ps1` | Settings, notification test, process priority/suspend, dry run, global hotkeys |
+| `test-hotkey.wsb` + `hotkey.ps1` | Minimizes the window and checks `Ctrl+Alt+D` / `Ctrl+Alt+W` |
+| `test-install.wsb` + `install-test.ps1` | Silent NSIS install, helper placement, Start Menu shortcut, toast |
 
 ## Run
 
@@ -44,3 +47,7 @@ otherwise reads Cyrillic as ANSI.
   the `runas` bridge are still exercised.
 - Writing to the mapped folder is slow for some metadata operations; the scripts
   use local `C:\Temp` files for helper I/O and copy only the final text.
+- Window navigation uses `--tab=<id>` (`--settings` also works): UI Automation
+  clicks on the sidebar are unreliable because the list scrolls.
+- Portable builds have no Start Menu shortcut, so Windows may swallow toasts.
+  The installed build shows them (verified in `install-test.ps1`).

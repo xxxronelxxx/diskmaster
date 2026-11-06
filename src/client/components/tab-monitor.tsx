@@ -5,9 +5,17 @@ import { queryClient } from "@/client/rpc-client";
 import { formatBytes, formatCount } from "@/client/lib/format";
 import { Badge, Button, Card, Modal, Progress, SectionTitle } from "./ui";
 import { Sparkline, BarMeter } from "./sparkline";
-import { AlertIcon, CpuIcon, MemoryIcon, RefreshIcon, SpinnerIcon, TrashIcon } from "./icons";
+import { AlertIcon, CpuIcon, MemoryIcon, PauseIcon, PlayIcon, RefreshIcon, SettingsIcon, SpinnerIcon, TrashIcon } from "./icons";
 
 type MetricsPayload = MetricsState & { processes: ProcessInfo[] };
+
+const PRIORITIES = [
+  ["normal", "Обычный"],
+  ["below", "Ниже обычного"],
+  ["above", "Выше обычного"],
+  ["high", "Высокий"],
+  ["idle", "Простой"],
+] as const;
 
 function percentTone(value: number): "emerald" | "amber" | "rose" {
   if (value >= 85) return "rose";
@@ -50,6 +58,8 @@ function MetricCard({
 export function MonitorTab() {
   const [showProcesses, setShowProcesses] = useState(true);
   const [pendingKill, setPendingKill] = useState<ProcessInfo | null>(null);
+  const [managing, setManaging] = useState<ProcessInfo | null>(null);
+  const [suspendState, setSuspendState] = useState<{ pid: number; suspended: boolean } | null>(null);
 
   const metricsQuery = useQuery({
     ...queryClient.system.metrics.queryOptions({ input: { processes: true } }),
@@ -60,10 +70,19 @@ export function MonitorTab() {
   });
 
   const killMutation = useMutation(queryClient.system.killProcess.mutationOptions());
+  const priorityMutation = useMutation(queryClient.system.processPriority.mutationOptions());
+  const suspendMutation = useMutation(queryClient.system.processSuspend.mutationOptions());
 
   const data = metricsQuery.data as MetricsPayload | undefined;
   const history = data?.history ?? [];
   const latest = data?.latest;
+  const managed = managing
+    ? (data?.processes ?? []).find((process) => process.pid === managing.pid) ?? managing
+    : null;
+  const suspended =
+    suspendState && managing && suspendState.pid === managing.pid
+      ? suspendState.suspended
+      : Boolean(managed?.suspended);
 
   const cpuSeries = history.map((sample) => sample.cpu);
   const ramSeries = history.map((sample) =>
@@ -75,6 +94,27 @@ export function MonitorTab() {
   const ramPercent = latest && latest.ramTotal > 0 ? (latest.ramUsed / latest.ramTotal) * 100 : 0;
   const diskPeak = Math.max(1024 * 1024, ...diskSeries);
   const netPeak = Math.max(1024 * 256, ...netSeries);
+
+  function openManage(process: ProcessInfo) {
+    priorityMutation.reset();
+    suspendMutation.reset();
+    setSuspendState({ pid: process.pid, suspended: process.suspended });
+    setManaging(process);
+  }
+
+  async function applyPriority(level: string) {
+    if (!managing) return;
+    await priorityMutation.mutateAsync({ pid: managing.pid, level });
+    void metricsQuery.refetch();
+  }
+
+  async function toggleSuspend() {
+    if (!managed) return;
+    const next = !suspended;
+    const result = await suspendMutation.mutateAsync({ pid: managed.pid, suspend: next });
+    if (result.ok) setSuspendState({ pid: managed.pid, suspended: next });
+    void metricsQuery.refetch();
+  }
 
   async function confirmKill() {
     if (!pendingKill) return;
@@ -229,7 +269,10 @@ export function MonitorTab() {
                 return (
                   <div key={process.pid} className="flex items-center gap-3 px-4 py-2.5">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-slate-100">{process.name}</p>
+                      <p className="flex items-center gap-2 truncate text-sm text-slate-100">
+                        {process.name}
+                        {process.suspended ? <Badge variant="warn">пауза</Badge> : null}
+                      </p>
                       <div className="mt-1 flex items-center gap-2">
                         <div className="w-24">
                           <Progress value={share * 3} tone="violet" className="h-1" />
@@ -244,7 +287,16 @@ export function MonitorTab() {
                       <p className="text-[10px] text-slate-500">{process.cpuPercent.toFixed(1).replace(".", ",")}% CPU</p>
                     </div>
                     <button
+                      onClick={() => openManage(process)}
+                      aria-label={`Управление процессом ${process.name}`}
+                      className="grid size-7 shrink-0 place-items-center rounded-lg text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200"
+                      title="Приоритет и приостановка"
+                    >
+                      <SettingsIcon className="size-3.5" />
+                    </button>
+                    <button
                       onClick={() => setPendingKill(process)}
+                      aria-label={`Завершить процесс ${process.name}`}
                       className="grid size-7 shrink-0 place-items-center rounded-lg text-slate-500 transition-colors hover:bg-rose-500/15 hover:text-rose-300"
                       title="Завершить процесс"
                     >
@@ -257,6 +309,88 @@ export function MonitorTab() {
           )
         ) : null}
       </Card>
+
+      <Modal
+        open={Boolean(managing)}
+        onClose={() => setManaging(null)}
+        title="Управление процессом"
+        description={
+          managed ? (
+            <>
+              <b className="text-white">{managed.name}</b> · pid {managed.pid}
+              {managed.path ? <span className="mt-1 block truncate font-mono text-[10px] text-slate-500">{managed.path}</span> : null}
+            </>
+          ) : null
+        }
+        footer={
+          <Button variant="ghost" onClick={() => setManaging(null)}>
+            Закрыть
+          </Button>
+        }
+      >
+        {managed ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.02] p-3">
+              <div>
+                <p className="text-xs text-slate-200">
+                  {suspended ? "Процесс приостановлен" : "Процесс работает"}
+                </p>
+                <p className="mt-0.5 text-[10px] text-slate-500">
+                  Приостановка замораживает все потоки и освобождает процессор.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant={suspended ? "success" : "secondary"}
+                loading={suspendMutation.isPending}
+                onClick={() => void toggleSuspend()}
+              >
+                {suspended ? <PlayIcon className="size-3.5" /> : <PauseIcon className="size-3.5" />}
+                {suspended ? "Продолжить" : "Приостановить"}
+              </Button>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[11px] uppercase tracking-wide text-slate-500">Приоритет</p>
+              <div className="grid grid-cols-2 gap-2">
+                {PRIORITIES.map(([level, label]) => (
+                  <Button
+                    key={level}
+                    size="sm"
+                    variant="secondary"
+                    loading={priorityMutation.isPending}
+                    onClick={() => void applyPriority(level)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+              <p className="mt-2 text-[10px] text-slate-600">
+                Высокий приоритет может замедлить систему. Системные процессы защищены.
+              </p>
+            </div>
+
+            {priorityMutation.data && !priorityMutation.data.ok ? (
+              <p className="rounded-lg border border-rose-400/30 bg-rose-500/10 p-2.5 text-[11px] text-rose-200">
+                {priorityMutation.data.error}
+              </p>
+            ) : null}
+            {suspendMutation.data && !suspendMutation.data.ok ? (
+              <p className="rounded-lg border border-rose-400/30 bg-rose-500/10 p-2.5 text-[11px] text-rose-200">
+                {suspendMutation.data.error}
+              </p>
+            ) : null}
+            {priorityMutation.data?.ok ? (
+              <p className="text-[11px] text-emerald-300">Приоритет изменён.</p>
+            ) : null}
+            {suspendMutation.data?.ok ? (
+              <p className="text-[11px] text-emerald-300">
+                {suspended ? "Процесс приостановлен." : "Процесс продолжает работу."}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </Modal>
 
       <Modal
         open={Boolean(pendingKill)}

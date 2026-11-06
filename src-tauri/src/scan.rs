@@ -794,6 +794,7 @@ fn dir_size(path: &Path) -> u64 {
 
 pub fn clean_categories(ids: &[String]) -> CleanResult {
     let definitions = categories();
+    let protected = crate::settings::protected_paths();
     let mut result = CleanResult {
         freed_bytes: 0,
         deleted_files: 0,
@@ -834,6 +835,9 @@ pub fn clean_categories(ids: &[String]) -> CleanResult {
                         continue;
                     }
                     let path = entry.path();
+                    if crate::guard::matches_protected(&path, &protected) {
+                        continue;
+                    }
                     let Ok(meta) = entry.metadata() else { continue };
                     if !meta.is_file() {
                         continue;
@@ -865,6 +869,9 @@ pub fn clean_categories(ids: &[String]) -> CleanResult {
                         continue;
                     }
                     let path = entry.path();
+                    if crate::guard::matches_protected(&path, &protected) {
+                        continue;
+                    }
                     let Ok(meta) = entry.metadata() else { continue };
                     if meta.is_dir() {
                         let size = dir_size(&path);
@@ -898,10 +905,35 @@ pub fn clean_categories(ids: &[String]) -> CleanResult {
     result
 }
 
+/// Simulates a cleanup: the same shape as `clean_categories`, but nothing is
+/// deleted. Used by the "пробный запуск" button.
+pub fn dry_run_categories(ids: &[String]) -> CleanResult {
+    let preview = preview_categories(ids, 0);
+    let mut result = CleanResult {
+        freed_bytes: 0,
+        deleted_files: 0,
+        categories: Vec::new(),
+        errors: Vec::new(),
+    };
+
+    for category in preview {
+        result.freed_bytes += category.total_bytes;
+        result.deleted_files += category.total_files;
+        result.categories.push(CleanCategoryResult {
+            id: category.id,
+            name: category.name,
+            bytes: category.total_bytes,
+            files: category.total_files,
+            errors: Vec::new(),
+        });
+    }
+
+    result
+}
+
 /* -------------------------------------------------------------------------- */
 /*                            recycle bin deletion                            */
 /* -------------------------------------------------------------------------- */
-
 pub fn move_to_recycle_bin(paths: &[String]) -> RecycleResult {
     let mut result = RecycleResult {
         removed: 0,
@@ -1027,6 +1059,7 @@ fn fixed_drive_letters() -> Vec<String> {
 #[allow(clippy::needless_late_init)]
 pub fn preview_categories(ids: &[String], limit: usize) -> Vec<PreviewCategory> {
     let definitions = categories();
+    let protected = crate::settings::protected_paths();
     let mut result = Vec::new();
 
     for def in definitions
@@ -1053,6 +1086,9 @@ pub fn preview_categories(ids: &[String], limit: usize) -> Vec<PreviewCategory> 
                     if def.id == "thumbnails" && !thumbnails_pattern(&name) {
                         continue;
                     }
+                    if crate::guard::matches_protected(&entry.path(), &protected) {
+                        continue;
+                    }
                     if let Ok(metadata) = entry.metadata() {
                         if metadata.is_file() {
                             total_bytes += metadata.len();
@@ -1068,7 +1104,7 @@ pub fn preview_categories(ids: &[String], limit: usize) -> Vec<PreviewCategory> 
         } else {
             let mut timed_out = false;
             for target in &def.paths {
-                if !target.is_dir() {
+                if !target.is_dir() || crate::guard::matches_protected(target, &protected) {
                     continue;
                 }
                 let measured = walk(
@@ -1076,6 +1112,9 @@ pub fn preview_categories(ids: &[String], limit: usize) -> Vec<PreviewCategory> 
                     None,
                     Duration::from_secs(8),
                     |path, metadata| {
+                        if crate::guard::matches_protected(path, &protected) {
+                            return;
+                        }
                         entries.push(PreviewEntry {
                             path: path.to_string_lossy().to_string(),
                             size: metadata.len(),

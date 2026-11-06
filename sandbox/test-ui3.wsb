@@ -1,0 +1,14 @@
+<Configuration>
+  <vGPU>Disable</vGPU>
+  <Networking>Enable</Networking>
+  <MappedFolders>
+    <MappedFolder>
+      <HostFolder>D:\work\cleaner\.sandbox\share</HostFolder>
+      <SandboxFolder>C:\Users\WDAGUtilityAccount\Desktop\share</SandboxFolder>
+      <ReadOnly>false</ReadOnly>
+    </MappedFolder>
+  </MappedFolders>
+  <LogonCommand>
+    <Command>C:\Users\WDAGUtilityAccount\Desktop\share\run-ui3.cmd</Command>
+  </LogonCommand>
+</Configuration>

@@ -60,6 +60,7 @@ export type ProcessInfo = {
   memory: number;
   cpuPercent: number;
   path: string | null;
+  suspended: boolean;
 };
 
 /* ---------------------------------- scan ---------------------------------- */
@@ -396,4 +397,24 @@ export type MaintenanceStatus = {
   sensors: SensorInfo[];
   restorePoints: RestorePoint[];
   helperAvailable: boolean;
+};
+
+/* -------------------------------- settings -------------------------------- */
+
+export type AppSettings = {
+  notifyLowDisk: boolean;
+  lowDiskPercent: number;
+  lowDiskCooldownMin: number;
+  quickCleanNotify: boolean;
+  minimizeToTray: boolean;
+  protectPaths: string[];
+  hotkeyShow: string;
+  hotkeyWidget: string;
+};
+
+export type SettingsState = {
+  settings: AppSettings;
+  autostart: boolean;
+  portable: boolean;
+  hotkeyErrors: string[];
 };

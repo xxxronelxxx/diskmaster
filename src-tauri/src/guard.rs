@@ -25,6 +25,20 @@ fn depth(path: &Path) -> usize {
     path.components().count()
 }
 
+/// True when the path matches one of the normalized protected prefixes.
+pub fn matches_protected(path: &Path, prefixes: &[String]) -> bool {
+    let normalized = normalize(path);
+    prefixes
+        .iter()
+        .any(|prefix| normalized == *prefix || normalized.starts_with(&format!("{prefix}\\")))
+}
+
+/// True when the path is inside a folder the user marked as protected in the
+/// settings tab.
+pub fn is_user_protected(path: &Path) -> bool {
+    matches_protected(path, &crate::settings::protected_paths())
+}
+
 /// A path is deletable when it is absolute, not a drive/profile root, not in a
 /// protected system location and not a reparse point (symlink/junction).
 pub fn check_path(path: &Path) -> Result<PathBuf, String> {
@@ -48,6 +62,12 @@ pub fn check_path(path: &Path) -> Result<PathBuf, String> {
         if normalized == prefix || normalized.starts_with(&format!("{prefix}\\")) {
             return Err(format!("Защищённый системный путь: {}", resolved.display()));
         }
+    }
+    if is_user_protected(&resolved) {
+        return Err(format!(
+            "Папка защищена в настройках: {}",
+            resolved.display()
+        ));
     }
 
     let metadata = std::fs::symlink_metadata(&resolved)

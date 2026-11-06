@@ -1,6 +1,6 @@
 [package]
 name = "disk-master"
-version = "1.6.2"
+version = "1.7.0"
 description = "Очистка диска, анализ места и мониторинг Windows"
 authors = ["Development SPB"]
 edition = "2021"
@@ -16,6 +16,8 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-global-shortcut = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sysinfo = { version = "0.33", default-features = false, features = ["system", "disk", "network", "multithread"] }

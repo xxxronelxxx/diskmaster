@@ -204,3 +204,35 @@ export function SectionTitle({
     </div>
   );
 }
+
+export function Switch({
+  checked,
+  onChange,
+  disabled = false,
+  label,
+}: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  disabled?: boolean;
+  label?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative h-5 w-9 shrink-0 rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+        checked ? "border-emerald-400/40 bg-emerald-500/80" : "border-white/10 bg-white/10"
+      }`}
+    >
+      <span
+        className={`absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow transition-transform ${
+          checked ? "translate-x-4" : ""
+        }`}
+      />
+    </button>
+  );
+}

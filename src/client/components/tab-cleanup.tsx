@@ -109,9 +109,11 @@ export function CleanupTab({
   const [cleanResult, setCleanResult] = useState<{ jobId: string; data: CleanResult } | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [preview, setPreview] = useState<CleanPreview | null>(null);
+  const [dryRun, setDryRun] = useState<{ jobId: string; data: CleanResult } | null>(null);
 
   const cleanMutation = useMutation(queryClient.system.cleanJunk.mutationOptions());
   const previewMutation = useMutation(queryClient.system.previewClean.mutationOptions());
+  const dryRunMutation = useMutation(queryClient.system.cleanDryRun.mutationOptions());
 
   const jobId = job?.jobId ?? "";
   const scanning = Boolean(job && !job.finishedAt);
@@ -163,6 +165,16 @@ export function CleanupTab({
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setSelected(next);
+  }
+
+  async function handleDryRun() {
+    const ids = [...selected].filter((id) => {
+      const category = visible.find((item) => item.id === id);
+      return category ? remaining(category) > 0 : false;
+    });
+    if (ids.length === 0) return;
+    const response = await dryRunMutation.mutateAsync({ categories: ids });
+    setDryRun({ jobId, data: response });
   }
 
   async function handleClean() {
@@ -292,6 +304,15 @@ export function CleanupTab({
               Выбрать всё безопасное
             </Button>
             <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void handleDryRun()}
+              loading={dryRunMutation.isPending}
+              disabled={selectedBytes === 0 || dryRunMutation.isPending}
+            >
+              Пробный запуск
+            </Button>
+            <Button
               variant="primary"
               onClick={() => setConfirming(true)}
               disabled={selectedBytes === 0 || cleanMutation.isPending}
@@ -301,6 +322,31 @@ export function CleanupTab({
             </Button>
           </div>
         </div>
+      ) : null}
+
+      {dryRun?.jobId === jobId ? (
+        <Card className="border-sky-400/25 bg-sky-500/[0.06] p-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-sky-100">
+              Пробный запуск: будет удалено <b>{formatBytes(dryRun.data.freedBytes)}</b> ·{" "}
+              {formatCount(dryRun.data.deletedFiles)} файлов. Ничего не удалено.
+            </p>
+            <button
+              className="text-[11px] text-slate-400 hover:text-white"
+              onClick={() => setDryRun(null)}
+            >
+              скрыть
+            </button>
+          </div>
+          <div className="mt-2 grid gap-1 sm:grid-cols-2">
+            {dryRun.data.categories.map((category) => (
+              <div key={category.id} className="flex justify-between gap-2 text-[11px]">
+                <span className="truncate text-slate-400">{category.name}</span>
+                <span className="shrink-0 tabular-nums text-slate-300">{formatBytes(category.bytes)}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
       ) : null}
 
       {job ? (

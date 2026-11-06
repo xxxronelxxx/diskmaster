@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AppSettings,
   CleanHistoryEntry,
   CleanPreview,
   CleanResult,
@@ -14,6 +15,7 @@ import type {
   ProcessInfo,
   RecycleResult,
   ScanState,
+  SettingsState,
   ScheduleConfig,
   ScheduleRun,
   ScheduleStatus,
@@ -56,12 +58,14 @@ function mutation<I, O>(cmd: string): () => MutationOptions<I, O> {
 
 export const api = {
   overview: () => invoke<SystemInfo>("overview"),
+  initialTab: () => invoke<string | null>("initial_tab"),
   metrics: (input?: { processes?: boolean }) => invoke<MetricsState & { processes: ProcessInfo[] }>("metrics", payload(input)),
   killProcess: (input: { pid: number }) => invoke<{ ok: boolean; error?: string }>("kill_process", { input }),
 
   startScan: (input?: { thresholdMb?: number }) => invoke<ScanState>("start_scan", payload(input)),
   scanStatus: (input: { jobId: string }) => invoke<ScanState | null>("scan_status", { input }),
   cleanJunk: (input: { categories: string[] }) => invoke<CleanResult>("clean_junk", { input }),
+  cleanDryRun: (input: { categories: string[] }) => invoke<CleanResult>("clean_dry_run", { input }),
   previewClean: (input: { categories: string[] }) => invoke<CleanPreview>("preview_clean", { input }),
   cleanHistory: () => invoke<CleanHistoryEntry[]>("clean_history"),
   writeTextFile: (input: { path: string; content: string }) => invoke<boolean>("write_text_file", { input }),
@@ -104,6 +108,16 @@ export const api = {
   widgetSave: (input: Partial<WidgetSettings>) => invoke<WidgetSettings>("widget_save", { input }),
   widgetAutostart: (input: { enabled: boolean }) => invoke<{ ok: boolean }>("widget_autostart", { input }),
 
+  processPriority: (input: { pid: number; level: string }) => invoke<{ ok: boolean; error?: string }>("process_priority", { input }),
+  processSuspend: (input: { pid: number; suspend: boolean }) => invoke<{ ok: boolean; error?: string }>("process_suspend", { input }),
+
+  settingsState: () => invoke<SettingsState>("settings_state"),
+  settingsSave: (input: AppSettings) => invoke<SettingsState>("settings_save", { input }),
+  settingsExport: (path: string) => invoke<void>("settings_export", { path }),
+  settingsImport: (path: string) => invoke<SettingsState>("settings_import", { path }),
+  autostartSet: (input: { enabled: boolean }) => invoke<{ ok: boolean; error?: string }>("autostart_set", { input }),
+  notificationTest: () => invoke<{ ok: boolean; error?: string }>("notification_test"),
+
   maintenanceStatus: () => invoke<MaintenanceStatus>("maintenance_status"),
   systemOperation: (input: { op: string; payload?: unknown }) =>
     invoke<{ ok: boolean; message: string; data: unknown }>("system_operation", { input }),
@@ -128,6 +142,7 @@ export const queryClient = {
       mutationOptions: mutation<never, never>("scan_status"),
     },
     cleanJunk: { mutationOptions: mutation<{ categories: string[] }, CleanResult>("clean_junk") },
+    cleanDryRun: { mutationOptions: mutation<{ categories: string[] }, CleanResult>("clean_dry_run") },
     previewClean: { mutationOptions: mutation<{ categories: string[] }, CleanPreview>("preview_clean") },
     cleanHistory: { queryOptions: () => query<CleanHistoryEntry[]>("clean_history") },
     deleteLargeFiles: { mutationOptions: mutation<{ paths: string[] }, RecycleResult>("delete_large_files") },
@@ -174,6 +189,14 @@ export const queryClient = {
     widgetStop: { mutationOptions: mutation<Record<string, never> | undefined, { ok: boolean }>("widget_stop") },
     widgetSave: { mutationOptions: mutation<Partial<WidgetSettings>, WidgetSettings>("widget_save") },
     widgetAutostart: { mutationOptions: mutation<{ enabled: boolean }, { ok: boolean }>("widget_autostart") },
+    processPriority: { mutationOptions: mutation<{ pid: number; level: string }, { ok: boolean; error?: string }>("process_priority") },
+    processSuspend: { mutationOptions: mutation<{ pid: number; suspend: boolean }, { ok: boolean; error?: string }>("process_suspend") },
+
+    settingsState: { queryOptions: () => query<SettingsState>("settings_state") },
+    settingsSave: { mutationOptions: mutation<AppSettings, SettingsState>("settings_save") },
+    autostartSet: { mutationOptions: mutation<{ enabled: boolean }, { ok: boolean; error?: string }>("autostart_set") },
+    notificationTest: { mutationOptions: mutation<Record<string, never> | undefined, { ok: boolean; error?: string }>("notification_test") },
+
     maintenanceStatus: { queryOptions: () => query<MaintenanceStatus>("maintenance_status") },
   },
 };

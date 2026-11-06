@@ -66,6 +66,7 @@ pub struct ProcessInfo {
     pub memory: u64,
     pub cpu_percent: f64,
     pub path: Option<String>,
+    pub suspended: bool,
 }
 
 /* ---------------------------------- scan ---------------------------------- */

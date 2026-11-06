@@ -1,8 +1,11 @@
+use std::sync::Mutex;
+
 use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
 
 use crate::clean_history::CleanHistoryEntry;
 use crate::maintenance::{self, MaintenanceStatus};
+use crate::settings::AppSettings;
 use crate::state::AppState;
 use crate::types::*;
 use crate::{
@@ -11,6 +14,14 @@ use crate::{
 };
 
 type CmdResult<T> = Result<T, String>;
+
+/// Tab requested with `--tab=<id>` or `--settings` on the command line.
+pub static INITIAL_TAB: Mutex<Option<String>> = Mutex::new(None);
+
+#[tauri::command]
+pub fn initial_tab() -> Option<String> {
+    INITIAL_TAB.lock().unwrap().clone()
+}
 
 async fn blocking<T, F>(work: F) -> CmdResult<T>
 where
@@ -245,6 +256,153 @@ pub async fn clean_junk(input: CleanInput) -> CmdResult<CleanResult> {
 pub async fn preview_clean(input: CleanInput) -> CmdResult<CleanPreview> {
     blocking(move || CleanPreview {
         categories: scan::preview_categories(&input.categories, 200),
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn clean_dry_run(input: CleanInput) -> CmdResult<CleanResult> {
+    blocking(move || scan::dry_run_categories(&input.categories)).await
+}
+
+/* -------------------------------- settings -------------------------------- */
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsState {
+    pub settings: AppSettings,
+    pub autostart: bool,
+    pub portable: bool,
+    pub hotkey_errors: Vec<String>,
+}
+
+fn settings_state_value(saved: AppSettings, app: &tauri::AppHandle) -> SettingsState {
+    SettingsState {
+        settings: saved,
+        autostart: crate::autostart_enabled(),
+        portable: crate::paths::is_portable(),
+        hotkey_errors: crate::apply_hotkeys(app),
+    }
+}
+
+#[tauri::command]
+pub fn settings_state() -> SettingsState {
+    SettingsState {
+        settings: crate::settings::current(),
+        autostart: crate::autostart_enabled(),
+        portable: crate::paths::is_portable(),
+        hotkey_errors: Vec::new(),
+    }
+}
+
+#[tauri::command]
+pub fn settings_save(input: AppSettings, app: tauri::AppHandle) -> Result<SettingsState, String> {
+    let saved = crate::settings::save(&input)?;
+    Ok(settings_state_value(saved, &app))
+}
+
+fn json_target(raw: &str) -> Result<std::path::PathBuf, String> {
+    let target = std::path::PathBuf::from(raw);
+    if !target.is_absolute() {
+        return Err("Путь должен быть абсолютным".into());
+    }
+    let is_json = target
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.eq_ignore_ascii_case("json"))
+        .unwrap_or(false);
+    if !is_json {
+        return Err("Выберите файл с расширением .json".into());
+    }
+    Ok(target)
+}
+
+#[tauri::command]
+pub fn settings_export(path: String) -> Result<(), String> {
+    let target = json_target(&path)?;
+    let json = crate::settings::export_json()?;
+    crate::paths::ensure_parent(&target);
+    std::fs::write(&target, json).map_err(|error| format!("Не удалось записать файл: {error}"))
+}
+
+#[tauri::command]
+pub fn settings_import(path: String, app: tauri::AppHandle) -> Result<SettingsState, String> {
+    let target = json_target(&path)?;
+    let raw = std::fs::read_to_string(&target)
+        .map_err(|error| format!("Не удалось прочитать файл: {error}"))?;
+    let saved = crate::settings::import_json(&raw)?;
+    Ok(settings_state_value(saved, &app))
+}
+
+#[derive(Deserialize)]
+pub struct AutostartInput {
+    pub enabled: bool,
+}
+
+#[tauri::command]
+pub fn autostart_set(input: AutostartInput) -> OkResult {
+    if crate::paths::is_portable() {
+        return OkResult {
+            ok: false,
+            error: Some("Автозапуск недоступен в портативной версии".into()),
+        };
+    }
+    crate::set_autostart(input.enabled);
+    OkResult {
+        ok: true,
+        error: None,
+    }
+}
+
+#[tauri::command]
+pub fn notification_test(app: tauri::AppHandle) -> OkResult {
+    use tauri_plugin_notification::NotificationExt;
+    match app
+        .notification()
+        .builder()
+        .title("Диск-Мастер")
+        .body("Уведомления работают.")
+        .show()
+    {
+        Ok(()) => OkResult {
+            ok: true,
+            error: None,
+        },
+        Err(error) => OkResult {
+            ok: false,
+            error: Some(error.to_string()),
+        },
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PriorityInput {
+    pub pid: u32,
+    pub level: String,
+}
+
+#[tauri::command]
+pub async fn process_priority(input: PriorityInput) -> CmdResult<OkResult> {
+    blocking(move || {
+        let (ok, error) = metrics::set_priority(input.pid, &input.level);
+        OkResult { ok, error }
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SuspendInput {
+    pub pid: u32,
+    pub suspend: bool,
+}
+
+#[tauri::command]
+pub async fn process_suspend(input: SuspendInput) -> CmdResult<OkResult> {
+    blocking(move || {
+        let (ok, error) = metrics::set_suspended(input.pid, input.suspend);
+        OkResult { ok, error }
     })
     .await
 }
