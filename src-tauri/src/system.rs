@@ -1,4 +1,5 @@
-use std::time::Duration;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 use sysinfo::{Disks, System};
@@ -76,6 +77,24 @@ fn os_name() -> (String, String, String) {
         format!("{build}.{ubr}")
     };
     (product, version, build)
+}
+
+static DRIVE_CACHE: Mutex<Option<(Instant, Vec<DriveInfo>)>> = Mutex::new(None);
+
+/// Widget polls every 1–2 seconds; enumerating volumes each time is wasteful.
+pub fn drives_cached() -> Vec<DriveInfo> {
+    {
+        let guard = DRIVE_CACHE.lock().unwrap();
+        if let Some((at, items)) = guard.as_ref() {
+            if at.elapsed() < Duration::from_secs(5) {
+                return items.clone();
+            }
+        }
+    }
+
+    let items = drives();
+    *DRIVE_CACHE.lock().unwrap() = Some((Instant::now(), items.clone()));
+    items
 }
 
 pub fn drives() -> Vec<DriveInfo> {

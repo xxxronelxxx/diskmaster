@@ -9,7 +9,6 @@ mod logging;
 mod metrics;
 mod paths;
 mod programs;
-mod ps;
 mod scan;
 mod schedule;
 mod startup;
@@ -17,6 +16,7 @@ mod state;
 mod system;
 mod types;
 mod widget;
+mod win_text;
 mod winget;
 
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
@@ -384,7 +384,6 @@ fn main() {
             }
 
             build_tray(app.handle())?;
-            metrics::cleanup_legacy_samplers();
             widget::migrate_autostart();
 
             if std::env::args().any(|value| value == "--widget") {

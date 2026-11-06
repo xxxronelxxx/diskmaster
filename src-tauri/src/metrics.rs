@@ -252,62 +252,6 @@ pub fn global() -> Arc<MetricsHandle> {
     Arc::clone(guard.as_ref().unwrap())
 }
 
-/// Older builds kept a PowerShell sampler alive for the whole session. The
-/// installer terminates the app without letting it stop the child, so upgrades
-/// leave an orphaned `powershell.exe` behind. This runs once (marker file) and
-/// stops exactly those processes: encoded script contains our old metrics
-/// markers and the parent process is already gone.
-pub fn cleanup_legacy_samplers() -> usize {
-    let marker = crate::paths::storage_path(&["legacy-samplers-cleanup.done"]);
-    if marker.exists() {
-        return 0;
-    }
-
-    // Fresh installations never had a PowerShell sampler. Only run the
-    // one-time migration when data from an old build is present.
-    let legacy = crate::paths::local_appdata().join("DiskMaster");
-    let has_legacy = ["history", "schedule", "widget"]
-        .iter()
-        .any(|name| legacy.join(name).exists());
-    if !has_legacy {
-        crate::paths::ensure_parent(&marker);
-        let _ = std::fs::write(&marker, b"done");
-        return 0;
-    }
-
-    let script = r#"
-$killed = 0
-$procs = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'powershell.exe' -and $_.CommandLine -like '*-EncodedCommand*' }
-foreach ($p in $procs) {
-  $parentAlive = $false
-  try { $parentAlive = [bool](Get-Process -Id $p.ParentProcessId -ErrorAction Stop) } catch {}
-  if ($parentAlive) { continue }
-  $parts = $p.CommandLine -split ' '
-  $index = [Array]::IndexOf($parts, '-EncodedCommand')
-  if ($index -lt 0 -or $index + 1 -ge $parts.Length) { continue }
-  try {
-    $bytes = [Convert]::FromBase64String($parts[$index + 1])
-    $text = [Text.Encoding]::Unicode.GetString($bytes)
-  } catch { continue }
-  if ($text -like '*Win32_PerfFormattedData_PerfOS_Processor*' -and $text -like '*prevDiskR*') {
-    Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
-    $killed += 1
-  }
-}
-Write-Output $killed
-"#;
-
-    let output = crate::ps::run(script, Duration::from_secs(30));
-    crate::paths::ensure_parent(&marker);
-    let _ = std::fs::write(&marker, b"done");
-
-    let stopped: usize = output.stdout.trim().parse().unwrap_or(0);
-    if stopped > 0 {
-        crate::logging::log(&format!("stopped {stopped} legacy metrics sampler(s)"));
-    }
-    stopped
-}
-
 pub fn stop_global() {
     if let Some(handle) = GLOBAL.lock().unwrap().take() {
         handle.stop();

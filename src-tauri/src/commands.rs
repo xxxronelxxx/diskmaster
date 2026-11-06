@@ -609,7 +609,7 @@ pub async fn widget_data() -> CmdResult<WidgetData> {
     blocking(|| {
         let settings = widget::read_settings();
         let (_, latest, _) = metrics::global().snapshot();
-        let drives = system::drives();
+        let drives = system::drives_cached();
         let top = if settings.show_top_process {
             metrics::list_processes(1).into_iter().next()
         } else {

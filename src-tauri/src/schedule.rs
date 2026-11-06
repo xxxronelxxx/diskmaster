@@ -79,8 +79,8 @@ fn schtasks_run(args: &[&str]) -> (bool, String) {
     command.args(args).creation_flags(CREATE_NO_WINDOW);
     match command.output() {
         Ok(output) => {
-            let mut text = String::from_utf8_lossy(&output.stdout).to_string();
-            text.push_str(&String::from_utf8_lossy(&output.stderr));
+            let mut text = crate::win_text::decode_oem(&output.stdout);
+            text.push_str(&crate::win_text::decode_oem(&output.stderr));
             (output.status.success(), text)
         }
         Err(error) => (false, error.to_string()),

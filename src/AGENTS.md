@@ -35,8 +35,8 @@ cd src-tauri && cargo clippy -- -D warnings
   PowerShell for these paths.
 - The widget is a second Tauri window (`widget.html`) with Win32 z-order and
   click-through applied from `widget.rs`; it is not a separate process.
-- No PowerShell scripts should be added back. PowerShell is only used once for
-  legacy sampler cleanup during migration (`cleanup_legacy_samplers`).
+- There is no PowerShell dependency anymore. Do not add PowerShell scripts or
+  child processes; use native Windows APIs, `sysinfo`, `winreg`, `schtasks`.
 - Version lives in `package.json`; run `pnpm version:sync` before builds (the
   release/portable scripts already do).
 - Updater signatures: never commit `*.key`, `*.sig`, `tauri/target`, `output/`.

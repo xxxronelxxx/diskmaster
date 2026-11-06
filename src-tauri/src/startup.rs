@@ -215,7 +215,7 @@ fn schtasks_query() -> Vec<StartupItem> {
     let Ok(output) = command.output() else {
         return Vec::new();
     };
-    let text = String::from_utf8_lossy(&output.stdout);
+    let text = crate::win_text::decode_oem(&output.stdout);
     let mut items = Vec::new();
 
     for line in text.lines().skip(1) {
