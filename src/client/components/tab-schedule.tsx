@@ -5,6 +5,7 @@ import { queryClient } from "@/client/rpc-client";
 import { formatBytes, formatCount, formatDate } from "@/client/lib/format";
 import { Badge, Button, Card, SectionTitle } from "./ui";
 import { AlertIcon, CheckIcon, RefreshIcon, SparkleIcon } from "./icons";
+import { currentLocale, t } from "@/client/i18n";
 
 const DAYS = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
 const EMPTY_RUNS: never[] = [];
@@ -61,10 +62,10 @@ export function ScheduleTab({ categories }: { categories: { id: string; name: st
     });
     setMessage(
       response.registered
-        ? { ok: true, text: "Расписание сохранено и задание создано в планировщике Windows" }
+        ? { ok: true, text: t("Расписание сохранено и задание создано в планировщике Windows") }
         : response.error
           ? { ok: false, text: response.error }
-          : { ok: true, text: "Расписание сохранено, автоочистка выключена" },
+          : { ok: true, text: t("Расписание сохранено, автоочистка выключена") },
     );
     await scheduleQuery.refetch();
   }
@@ -74,7 +75,13 @@ export function ScheduleTab({ categories }: { categories: { id: string; name: st
     setMessage(
       result.errors.length > 0
         ? { ok: false, text: result.errors.slice(0, 2).join("; ") }
-        : { ok: true, text: `Очищено ${formatBytes(result.freedBytes)} · ${formatCount(result.files)} объектов` },
+        : {
+            ok: true,
+            text: t("Очищено {size} · {files} объектов", {
+              size: formatBytes(result.freedBytes),
+              files: formatCount(result.files),
+            }),
+          },
     );
     await historyQuery.refetch();
   }
@@ -84,22 +91,22 @@ export function ScheduleTab({ categories }: { categories: { id: string; name: st
   return (
     <div className="space-y-5">
       <SectionTitle
-        title="Автоочистка по расписанию"
-        subtitle="Windows будет сам запускать очистку выбранных категорий через Планировщик заданий"
+        title={t("Автоочистка по расписанию")}
+        subtitle={t("Windows будет сам запускать очистку выбранных категорий через Планировщик заданий")}
         action={
           <div className="flex items-center gap-2">
             {status?.registered ? (
-              <Badge variant="success">задание создано</Badge>
+              <Badge variant="success">{t("задание создано")}</Badge>
             ) : (
-              <Badge variant="neutral">задание не создано</Badge>
+              <Badge variant="neutral">{t("задание не создано")}</Badge>
             )}
             <Button variant="primary" onClick={save} loading={saveMutation.isPending}>
               <CheckIcon className="size-4" />
-              Сохранить
+              {t("Сохранить")}
             </Button>
             <Button variant="secondary" onClick={runNow} loading={runMutation.isPending}>
               <SparkleIcon className="size-4" />
-              Запустить сейчас
+              {t("Запустить сейчас")}
             </Button>
           </div>
         }
@@ -131,11 +138,15 @@ export function ScheduleTab({ categories }: { categories: { id: string; name: st
           <Card className="p-4">
             <div className="flex items-center justify-between border-b border-white/[0.07] pb-3">
               <div>
-                <p className="text-sm font-medium text-white">Включить автоочистку</p>
+                <p className="text-sm font-medium text-white">{t("Включить автоочистку")}</p>
                 <p className="mt-0.5 text-[11px] text-slate-500">
                   {status?.nextRun
-                    ? `Следующий запуск: ${new Date(status.nextRun).toLocaleString("ru-RU")}`
-                    : "Задание ещё не запланировано"}
+                    ? t("Следующий запуск: {date}", {
+                        date: new Date(status.nextRun).toLocaleString(
+                          currentLocale() === "en" ? "en-US" : "ru-RU",
+                        ),
+                      })
+                    : t("Задание ещё не запланировано")}
                 </p>
               </div>
               <button
@@ -156,14 +167,14 @@ export function ScheduleTab({ categories }: { categories: { id: string; name: st
 
             <div className="mt-3 space-y-3">
               <div>
-                <p className="mb-1.5 text-[11px] uppercase tracking-wide text-slate-500">Частота</p>
+                <p className="mb-1.5 text-[11px] uppercase tracking-wide text-slate-500">{t("Частота")}</p>
                 <div className="flex flex-wrap gap-1.5">
                   {(
                     [
-                      ["daily", "Каждый день"],
-                      ["weekly", "По дням недели"],
-                      ["monthly", "Раз в месяц"],
-                      ["logon", "При входе"],
+                      ["daily", t("Каждый день")],
+                      ["weekly", t("По дням недели")],
+                      ["monthly", t("Раз в месяц")],
+                      ["logon", t("При входе")],
                     ] as [ScheduleFrequency, string][]
                   ).map(([key, label]) => (
                     <button
@@ -183,7 +194,7 @@ export function ScheduleTab({ categories }: { categories: { id: string; name: st
 
               {config.frequency === "weekly" ? (
                 <div>
-                  <p className="mb-1.5 text-[11px] uppercase tracking-wide text-slate-500">День недели</p>
+                  <p className="mb-1.5 text-[11px] uppercase tracking-wide text-slate-500">{t("День недели")}</p>
                   <div className="flex gap-1">
                     {DAYS.map((day, index) => (
                       <button
@@ -195,7 +206,7 @@ export function ScheduleTab({ categories }: { categories: { id: string; name: st
                             : "bg-white/[0.04] text-slate-400 hover:bg-white/[0.08]"
                         }`}
                       >
-                        {day}
+                        {t(day)}
                       </button>
                     ))}
                   </div>
@@ -204,7 +215,7 @@ export function ScheduleTab({ categories }: { categories: { id: string; name: st
 
               {config.frequency !== "logon" ? (
                 <div>
-                  <p className="mb-1.5 text-[11px] uppercase tracking-wide text-slate-500">Время запуска</p>
+                  <p className="mb-1.5 text-[11px] uppercase tracking-wide text-slate-500">{t("Время запуска")}</p>
                   <input
                     type="time"
                     value={config.time}
@@ -216,7 +227,7 @@ export function ScheduleTab({ categories }: { categories: { id: string; name: st
 
               <div>
                 <p className="mb-1.5 text-[11px] uppercase tracking-wide text-slate-500">
-                  Что очищать ({config.categories.length})
+                  {t("Что очищать (")}{config.categories.length})
                 </p>
                 <div className="grid max-h-56 gap-1 overflow-auto pr-1 sm:grid-cols-2">
                   {categories.map((category) => {
@@ -242,7 +253,7 @@ export function ScheduleTab({ categories }: { categories: { id: string; name: st
                             })
                           }
                         />
-                        <span className="truncate">{CATEGORY_LABELS[category.id] ?? category.name}</span>
+                        <span className="truncate">{t(CATEGORY_LABELS[category.id] ?? category.name)}</span>
                       </label>
                     );
                   })}
@@ -254,7 +265,7 @@ export function ScheduleTab({ categories }: { categories: { id: string; name: st
           <div className="space-y-4">
             <Card className="p-4">
               <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-sm font-medium text-white">Журнал запусков</h3>
+                <h3 className="text-sm font-medium text-white">{t("Журнал запусков")}</h3>
                 <button
                   onClick={() => void historyQuery.refetch()}
                   className="text-[11px] text-slate-500 hover:text-slate-200"
@@ -264,8 +275,7 @@ export function ScheduleTab({ categories }: { categories: { id: string; name: st
               </div>
               {runs.length === 0 ? (
                 <p className="text-[11px] leading-relaxed text-slate-500">
-                  Пока нет запусков. Первый отчёт появится после срабатывания расписания
-                  (или ручного запуска из раздела «Очистка»).
+                  {t("Пока нет запусков. Первый отчёт появится после срабатывания расписания (или ручного запуска из раздела «Очистка»).")}
                 </p>
               ) : (
                 <div className="space-y-1.5">
@@ -277,8 +287,8 @@ export function ScheduleTab({ categories }: { categories: { id: string; name: st
                       <div>
                         <p className="text-slate-200">{formatDate(run.at)}</p>
                         <p className="text-[10px] text-slate-600">
-                          {formatCount(run.categories.length)} категорий ·{" "}
-                          {run.trigger === "manual" ? "вручную" : "по расписанию"}
+                          {formatCount(run.categories.length)} {t("категорий ·")}{" "}
+                          {run.trigger === "manual" ? t("вручную") : t("по расписанию")}
                         </p>
                       </div>
                       <span className="tabular-nums text-emerald-300">{formatBytes(run.freedBytes)}</span>
@@ -291,13 +301,13 @@ export function ScheduleTab({ categories }: { categories: { id: string; name: st
             <Card className="p-4">
               <h3 className="flex items-center gap-2 text-sm font-medium text-white">
                 <SparkleIcon className="size-4 text-emerald-300" />
-                Как это работает
+                {t("Как это работает")}
               </h3>
               <ul className="mt-2 space-y-1.5 text-[11px] leading-relaxed text-slate-400">
-                <li>· Создаётся задание Windows «DiskMasterAutoClean» в папке \DiskMaster\</li>
-                <li>· Запуск пропускается, если компьютер выключен, и выполняется при включении</li>
-                <li>· Отчёт о каждом запуске пишется в журнал и виден здесь</li>
-                <li>· Для изменения задания нужны права администратора</li>
+                <li>{t("· Создаётся задание Windows «DiskMasterAutoClean» в папке \\DiskMaster\\")}</li>
+                <li>{t("· Запуск пропускается, если компьютер выключен, и выполняется при включении")}</li>
+                <li>{t("· Отчёт о каждом запуске пишется в журнал и виден здесь")}</li>
+                <li>{t("· Для изменения задания нужны права администратора")}</li>
               </ul>
             </Card>
           </div>

@@ -448,8 +448,11 @@ pub fn notification_test(app: tauri::AppHandle) -> OkResult {
     match app
         .notification()
         .builder()
-        .title("Диск-Мастер")
-        .body("Уведомления работают.")
+        .title(crate::locale::tr("Диск-Мастер", "Disk Master"))
+        .body(crate::locale::tr(
+            "Уведомления работают.",
+            "Notifications are working.",
+        ))
         .extra("tab", "settings")
         .show()
     {

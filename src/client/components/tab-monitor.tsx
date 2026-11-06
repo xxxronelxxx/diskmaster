@@ -6,6 +6,7 @@ import { formatBytes } from "@/client/lib/format";
 import { Badge, Button, Card, Modal, Progress, SectionTitle } from "./ui";
 import { Sparkline, BarMeter } from "./sparkline";
 import { AlertIcon, CpuIcon, MemoryIcon, PauseIcon, PlayIcon, RefreshIcon, SettingsIcon, SpinnerIcon, TrashIcon } from "./icons";
+import { t, translateError } from "@/client/i18n";
 
 type MetricsPayload = MetricsState & { processes: ProcessInfo[] };
 
@@ -126,11 +127,14 @@ export function MonitorTab() {
   return (
     <div className="space-y-5">
       <SectionTitle
-        title="Мониторинг"
+        title={t("Мониторинг")}
         subtitle={
           latest
-            ? `Обновление каждую секунду · ${history.length} точек истории · адаптер ${latest.netAdapter ?? "—"}`
-            : "Собираем данные о нагрузке…"
+            ? t("Обновление каждую секунду · {points} точек истории · адаптер {adapter}", {
+                points: history.length,
+                adapter: latest.netAdapter ?? "—",
+              })
+            : t("Собираем данные о нагрузке…")
         }
         action={
           <div className="flex gap-2">
@@ -141,7 +145,7 @@ export function MonitorTab() {
               loading={metricsQuery.isFetching && !latest}
             >
               <RefreshIcon className="size-4" />
-              Обновить
+              {t("Обновить")}
             </Button>
           </div>
         }
@@ -164,55 +168,55 @@ export function MonitorTab() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard
-            label="Процессор"
+            label={t("Процессор")}
             value={`${latest.cpu.toFixed(0)}%`}
-            hint={`${latest.cores.length} ядер`}
+            hint={t("{count} ядер", { count: latest.cores.length })}
             values={cpuSeries}
             max={100}
             tone={percentTone(latest.cpu)}
             footer={<BarMeter value={latest.cpu} tone={percentTone(latest.cpu)} />}
           />
           <MetricCard
-            label="Память"
+            label={t("Память")}
             value={`${formatBytes(latest.ramUsed, 1)}`}
-            hint={`из ${formatBytes(latest.ramTotal, 0)}`}
+            hint={t("из {total}", { total: formatBytes(latest.ramTotal, 0) })}
             values={ramSeries}
             max={100}
             tone={percentTone(ramPercent)}
             footer={
               <div className="flex items-center justify-between text-[11px] text-slate-400">
-                <span>{ramPercent.toFixed(0)}% занято</span>
+                <span>{ramPercent.toFixed(0)}{t("% занято")}</span>
                 <span className="text-slate-500">
-                  свободно {formatBytes(latest.ramTotal - latest.ramUsed, 1)}
+                  {t("свободно")} {formatBytes(latest.ramTotal - latest.ramUsed, 1)}
                 </span>
               </div>
             }
           />
           <MetricCard
-            label="Диск"
-            value={`${formatBytes(latest.diskRead + latest.diskWrite, 1)}/с`}
-            hint="чтение + запись"
+            label={t("Диск")}
+            value={`${formatBytes(latest.diskRead + latest.diskWrite, 1)}${t("/с")}`}
+            hint={t("чтение + запись")}
             values={diskSeries}
             max={diskPeak}
             tone="sky"
             footer={
               <div className="flex justify-between text-[11px] text-slate-400">
-                <span>чтение {formatBytes(latest.diskRead, 1)}/с</span>
-                <span>запись {formatBytes(latest.diskWrite, 1)}/с</span>
+                <span>{t("чтение")} {formatBytes(latest.diskRead, 1)}{t("/с")}</span>
+                <span>{t("запись")} {formatBytes(latest.diskWrite, 1)}{t("/с")}</span>
               </div>
             }
           />
           <MetricCard
-            label="Сеть"
-            value={`${formatBytes(latest.netIn + latest.netOut, 1)}/с`}
-            hint={latest.netAdapter ? latest.netAdapter.slice(0, 22) : "адаптер не найден"}
+            label={t("Сеть")}
+            value={`${formatBytes(latest.netIn + latest.netOut, 1)}${t("/с")}`}
+            hint={latest.netAdapter ? latest.netAdapter.slice(0, 22) : t("адаптер не найден")}
             values={netSeries}
             max={netPeak}
             tone="violet"
             footer={
               <div className="flex justify-between text-[11px] text-slate-400">
-                <span>↓ {formatBytes(latest.netIn, 1)}/с</span>
-                <span>↑ {formatBytes(latest.netOut, 1)}/с</span>
+                <span>↓ {formatBytes(latest.netIn, 1)}{t("/с")}</span>
+                <span>↑ {formatBytes(latest.netOut, 1)}{t("/с")}</span>
               </div>
             }
           />
@@ -223,8 +227,8 @@ export function MonitorTab() {
         <Card className="p-4">
           <div className="mb-3 flex items-center gap-2">
             <CpuIcon className="size-4 text-sky-300" />
-            <h3 className="text-sm font-medium text-white">Ядра процессора</h3>
-            <span className="ml-auto text-[11px] text-slate-500">мгновенная загрузка</span>
+            <h3 className="text-sm font-medium text-white">{t("Ядра процессора")}</h3>
+            <span className="ml-auto text-[11px] text-slate-500">{t("мгновенная загрузка")}</span>
           </div>
           <div className="grid grid-cols-4 gap-2 sm:grid-cols-8 xl:grid-cols-16">
             {latest.cores.map((core, index) => (
@@ -246,21 +250,21 @@ export function MonitorTab() {
         <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3">
           <div className="flex items-center gap-2">
             <MemoryIcon className="size-4 text-violet-300" />
-            <h3 className="text-sm font-medium text-white">Процессы по памяти</h3>
-            <Badge variant="neutral">топ 12</Badge>
+            <h3 className="text-sm font-medium text-white">{t("Процессы по памяти")}</h3>
+            <Badge variant="neutral">{t("топ 12")}</Badge>
           </div>
           <button
             onClick={() => setShowProcesses((current) => !current)}
             className="text-[11px] text-slate-400 hover:text-white"
           >
-            {showProcesses ? "скрыть" : "показать"}
+            {showProcesses ? t("скрыть") : t("показать")}
           </button>
         </div>
 
         {showProcesses ? (
           metricsQuery.isLoading ? (
             <div className="flex items-center gap-2 p-4 text-xs text-slate-400">
-              <SpinnerIcon className="size-3.5" /> Читаем список процессов…
+              <SpinnerIcon className="size-3.5" /> {t("Читаем список процессов…")}
             </div>
           ) : (
             <div className="divide-y divide-white/[0.06]">
@@ -271,7 +275,7 @@ export function MonitorTab() {
                     <div className="min-w-0 flex-1">
                       <p className="flex items-center gap-2 truncate text-sm text-slate-100">
                         {process.name}
-                        {process.suspended ? <Badge variant="warn">пауза</Badge> : null}
+                        {process.suspended ? <Badge variant="warn">{t("пауза")}</Badge> : null}
                       </p>
                       <div className="mt-1 flex items-center gap-2">
                         <div className="w-24">
@@ -288,17 +292,17 @@ export function MonitorTab() {
                     </div>
                     <button
                       onClick={() => openManage(process)}
-                      aria-label={`Управление процессом ${process.name}`}
+                      aria-label={t("Управление процессом {name}", { name: process.name })}
                       className="grid size-7 shrink-0 place-items-center rounded-lg text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200"
-                      title="Приоритет и приостановка"
+                      title={t("Приоритет и приостановка")}
                     >
                       <SettingsIcon className="size-3.5" />
                     </button>
                     <button
                       onClick={() => setPendingKill(process)}
-                      aria-label={`Завершить процесс ${process.name}`}
+                      aria-label={t("Завершить процесс {name}", { name: process.name })}
                       className="grid size-7 shrink-0 place-items-center rounded-lg text-slate-500 transition-colors hover:bg-rose-500/15 hover:text-rose-300"
-                      title="Завершить процесс"
+                      title={t("Завершить процесс")}
                     >
                       <TrashIcon className="size-3.5" />
                     </button>
@@ -313,7 +317,7 @@ export function MonitorTab() {
       <Modal
         open={Boolean(managing)}
         onClose={() => setManaging(null)}
-        title="Управление процессом"
+        title={t("Управление процессом")}
         description={
           managed ? (
             <>
@@ -324,7 +328,7 @@ export function MonitorTab() {
         }
         footer={
           <Button variant="ghost" onClick={() => setManaging(null)}>
-            Закрыть
+            {t("Закрыть")}
           </Button>
         }
       >
@@ -333,11 +337,10 @@ export function MonitorTab() {
             <div className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.02] p-3">
               <div>
                 <p className="text-xs text-slate-200">
-                  {suspended ? "Процесс приостановлен" : "Процесс работает"}
+                  {suspended ? t("Процесс приостановлен") : t("Процесс работает")}
                 </p>
                 <p className="mt-0.5 text-[10px] text-slate-500">
-                  Приостановка замораживает все потоки и освобождает процессор. Процесс останется
-                  замороженным, пока вы не нажмёте «Продолжить», даже после закрытия программы.
+                  {t("Приостановка замораживает все потоки и освобождает процессор. Процесс останется замороженным, пока вы не нажмёте «Продолжить», даже после закрытия программы.")}
                 </p>
               </div>
               <Button
@@ -347,12 +350,12 @@ export function MonitorTab() {
                 onClick={() => void toggleSuspend()}
               >
                 {suspended ? <PlayIcon className="size-3.5" /> : <PauseIcon className="size-3.5" />}
-                {suspended ? "Продолжить" : "Приостановить"}
+                {suspended ? t("Продолжить") : t("Приостановить")}
               </Button>
             </div>
 
             <div>
-              <p className="mb-2 text-[11px] uppercase tracking-wide text-slate-500">Приоритет</p>
+              <p className="mb-2 text-[11px] uppercase tracking-wide text-slate-500">{t("Приоритет")}</p>
               <div className="grid grid-cols-2 gap-2">
                 {PRIORITIES.map(([level, label]) => (
                   <Button
@@ -362,31 +365,31 @@ export function MonitorTab() {
                     loading={priorityMutation.isPending}
                     onClick={() => void applyPriority(level)}
                   >
-                    {label}
+                    {t(label)}
                   </Button>
                 ))}
               </div>
               <p className="mt-2 text-[10px] text-slate-600">
-                Высокий приоритет может замедлить систему. Системные процессы защищены.
+                {t("Высокий приоритет может замедлить систему. Системные процессы защищены.")}
               </p>
             </div>
 
             {priorityMutation.data && !priorityMutation.data.ok ? (
               <p className="rounded-lg border border-rose-400/30 bg-rose-500/10 p-2.5 text-[11px] text-rose-200">
-                {priorityMutation.data.error}
+                {translateError(priorityMutation.data.error)}
               </p>
             ) : null}
             {suspendMutation.data && !suspendMutation.data.ok ? (
               <p className="rounded-lg border border-rose-400/30 bg-rose-500/10 p-2.5 text-[11px] text-rose-200">
-                {suspendMutation.data.error}
+                {translateError(suspendMutation.data.error)}
               </p>
             ) : null}
             {priorityMutation.data?.ok ? (
-              <p className="text-[11px] text-emerald-300">Приоритет изменён.</p>
+              <p className="text-[11px] text-emerald-300">{t("Приоритет изменён.")}</p>
             ) : null}
             {suspendMutation.data?.ok ? (
               <p className="text-[11px] text-emerald-300">
-                {suspended ? "Процесс приостановлен." : "Процесс продолжает работу."}
+                {suspended ? t("Процесс приостановлен.") : t("Процесс продолжает работу.")}
               </p>
             ) : null}
           </div>
@@ -396,30 +399,29 @@ export function MonitorTab() {
       <Modal
         open={Boolean(pendingKill)}
         onClose={() => setPendingKill(null)}
-        title="Завершить процесс?"
+        title={t("Завершить процесс?")}
         description={
           pendingKill ? (
             <>
-              Процесс <b className="text-white">{pendingKill.name}</b> (pid {pendingKill.pid}) будет
-              остановлен принудительно. Несохранённые данные в программе могут быть потеряны.
+              {t("Процесс")} <b className="text-white">{pendingKill.name}</b> (pid {pendingKill.pid}{t(") будет остановлен принудительно. Несохранённые данные в программе могут быть потеряны.")}
             </>
           ) : null
         }
         footer={
           <>
             <Button variant="ghost" onClick={() => setPendingKill(null)}>
-              Отмена
+              {t("Отмена")}
             </Button>
             <Button variant="danger" onClick={confirmKill} loading={killMutation.isPending}>
               <TrashIcon className="size-4" />
-              Завершить
+              {t("Завершить")}
             </Button>
           </>
         }
       >
         {killMutation.data && !killMutation.data.ok ? (
           <p className="rounded-lg border border-rose-400/30 bg-rose-500/10 p-2.5 text-[11px] text-rose-200">
-            {killMutation.data.error}
+            {translateError(killMutation.data.error)}
           </p>
         ) : null}
       </Modal>

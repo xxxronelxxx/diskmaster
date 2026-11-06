@@ -43,6 +43,10 @@ cd src-tauri && cargo clippy -- -D warnings
   click-through applied from `widget.rs`; it is not a separate process.
 - There is no PowerShell dependency anymore. Do not add PowerShell scripts or
   child processes; use native Windows APIs, `sysinfo`, `winreg`, `schtasks`.
+- UI strings are wrapped in `t("русский текст")`; add English variants to
+  `src/client/i18n-en.ts` and manual fixes to `src/client/i18n.ts`. Locale is
+  stored in `localStorage` (`dm.locale`) and pushed to the backend with
+  `set_locale` for the tray and notifications.
 - Version lives in `package.json`; run `pnpm version:sync` before builds (the
   release/portable scripts already do).
 - Updater signatures: never commit `*.key`, `*.sig`, `tauri/target`, `output/`.

@@ -1,3 +1,5 @@
+import { t } from "@/client/i18n";
+
 type SparklineProps = {
   values: number[];
   max?: number;
@@ -33,7 +35,7 @@ export function Sparkline({
         className={`flex items-center justify-center rounded-lg bg-white/[0.03] text-[10px] text-slate-600 ${className}`}
         style={{ height }}
       >
-        нет данных
+        {t("нет данных")}
       </div>
     );
   }

@@ -8,6 +8,7 @@ import { queryClient } from "@/client/rpc-client";
 import { useI18n } from "@/client/i18n-provider";
 import { AlertIcon, CheckIcon, DownloadIcon, FolderIcon, RefreshIcon, SettingsIcon, TrashIcon } from "./icons";
 import { Badge, Button, Card, SectionTitle, Switch } from "./ui";
+import { t, translateError } from "@/client/i18n";
 
 const DEFAULT_SETTINGS: AppSettings = {
   notifyLowDisk: true,
@@ -79,15 +80,15 @@ export function SettingsTab() {
     try {
       const saved = await saveMutation.mutateAsync(draft);
       if (saved.startupError) {
-        setError(saved.startupError);
+        setError(translateError(saved.startupError));
       } else if (saved.hotkeyErrors.length > 0) {
-        setError(`Не удалось зарегистрировать: ${saved.hotkeyErrors.join("; ")}`);
+        setError(t("Не удалось зарегистрировать: {errors}", { errors: saved.hotkeyErrors.join("; ") }));
       } else {
-        setNotice("Настройки сохранены");
+        setNotice(t("Настройки сохранены"));
       }
       await stateQuery.refetch();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(translateError(cause));
     }
   }
 
@@ -95,10 +96,10 @@ export function SettingsTab() {
     setError(null);
     try {
       const result = await autostartMutation.mutateAsync({ enabled });
-      if (!result.ok) setError(result.error ?? "Не удалось изменить автозапуск");
+      if (!result.ok) setError(result.error ?? t("Не удалось изменить автозапуск"));
       await stateQuery.refetch();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(translateError(cause));
     }
   }
 
@@ -106,14 +107,14 @@ export function SettingsTab() {
     setNotifyResult(null);
     try {
       const result = await notifyMutation.mutateAsync(undefined);
-      setNotifyResult(result.ok ? "Уведомление отправлено" : (result.error ?? "Не удалось отправить уведомление"));
+      setNotifyResult(result.ok ? t("Уведомление отправлено") : (result.error ?? t("Не удалось отправить уведомление")));
     } catch (cause) {
-      setNotifyResult(cause instanceof Error ? cause.message : String(cause));
+      setNotifyResult(translateError(cause));
     }
   }
 
   async function addProtectedFolder() {
-    const selected = await open({ directory: true, multiple: false, title: "Защищённая папка" });
+    const selected = await open({ directory: true, multiple: false, title: t("Защищённая папка") });
     if (typeof selected !== "string") return;
     const exists = settings.protectPaths.some(
       (value) => value.toLowerCase() === selected.toLowerCase(),
@@ -130,15 +131,15 @@ export function SettingsTab() {
     setError(null);
     try {
       const target = await save({
-        title: "Экспорт настроек",
+        title: t("Экспорт настроек"),
         defaultPath: "diskmaster-settings.json",
         filters: [{ name: "JSON", extensions: ["json"] }],
       });
       if (!target) return;
       await api.settingsExport(target);
-      setNotice(`Настройки сохранены в ${target}`);
+      setNotice(t("Настройки сохранены в {path}", { path: target }));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(translateError(cause));
     }
   }
 
@@ -148,30 +149,30 @@ export function SettingsTab() {
       const selected = await open({
         multiple: false,
         directory: false,
-        title: "Импорт настроек",
+        title: t("Импорт настроек"),
         filters: [{ name: "JSON", extensions: ["json"] }],
       });
       if (typeof selected !== "string") return;
       const imported = await importMutation.mutateAsync(selected);
       setDraft(imported.settings);
       if (imported.startupError) {
-        setError(imported.startupError);
+        setError(translateError(imported.startupError));
       } else if (imported.hotkeyErrors.length > 0) {
-        setError(`Не удалось зарегистрировать: ${imported.hotkeyErrors.join("; ")}`);
+        setError(t("Не удалось зарегистрировать: {errors}", { errors: imported.hotkeyErrors.join("; ") }));
       } else {
-        setNotice("Настройки импортированы");
+        setNotice(t("Настройки импортированы"));
       }
       await stateQuery.refetch();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(translateError(cause));
     }
   }
 
   return (
     <div className="space-y-5">
       <SectionTitle
-        title="Настройки"
-        subtitle="Уведомления, горячие клавиши, защищённые папки и резервная копия настроек"
+        title={t("Настройки")}
+        subtitle={t("Уведомления, горячие клавиши, защищённые папки и резервная копия настроек")}
         action={
           <div className="flex gap-2">
             <Button
@@ -179,10 +180,10 @@ export function SettingsTab() {
               onClick={() => setDraft({ ...DEFAULT_SETTINGS, protectPaths: settings.protectPaths })}
               disabled={!draft}
             >
-              Сбросить
+              {t("Сбросить")}
             </Button>
             <Button variant="primary" onClick={() => void saveSettings()} loading={saveMutation.isPending} disabled={!dirty}>
-              Сохранить
+              {t("Сохранить")}
             </Button>
           </div>
         }
@@ -206,9 +207,9 @@ export function SettingsTab() {
 
       <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
         <div>
-          <p className="text-sm font-medium text-white">Язык интерфейса</p>
+          <p className="text-sm font-medium text-white">{t("Язык интерфейса")}</p>
           <p className="mt-0.5 text-[11px] text-slate-500">
-            Переключается сразу, без перезапуска. Настройка хранится на этом компьютере.
+            {t("Переключается сразу, без перезапуска. Настройка хранится на этом компьютере.")}
           </p>
         </div>
         <div className="flex gap-2">
@@ -217,7 +218,7 @@ export function SettingsTab() {
             variant={locale === "ru" ? "primary" : "secondary"}
             onClick={() => changeLocale("ru")}
           >
-            Русский
+            {t("Русский")}
           </Button>
           <Button
             size="sm"
@@ -232,9 +233,7 @@ export function SettingsTab() {
       {state?.portable ? (
         <Card className="border-amber-400/25 bg-amber-400/[0.06] p-3.5">
           <p className="text-xs text-amber-100">
-            Портативная версия: автозапуск недоступен, настройки лежат рядом с программой.
-            Системные уведомления могут не показываться без ярлыка в меню «Пуск» — в установленной
-            версии они работают.
+            {t("Портативная версия: автозапуск недоступен, настройки лежат рядом с программой. Системные уведомления могут не показываться без ярлыка в меню «Пуск» — в установленной версии они работают.")}
           </p>
         </Card>
       ) : null}
@@ -243,15 +242,15 @@ export function SettingsTab() {
         <Card className="p-4">
           <div className="mb-2 flex items-center gap-2">
             <AlertIcon className="size-4 text-amber-300" />
-            <p className="text-sm font-medium text-white">Уведомления</p>
+            <p className="text-sm font-medium text-white">{t("Уведомления")}</p>
           </div>
 
           <SettingRow
-            title="Мало свободного места"
-            description="Показывать системное уведомление, когда на диске остаётся меньше порога."
+            title={t("Мало свободного места")}
+            description={t("Показывать системное уведомление, когда на диске остаётся меньше порога.")}
           >
             <Switch
-              label="Уведомлять о низком свободном месте"
+              label={t("Уведомлять о низком свободном месте")}
               checked={settings.notifyLowDisk}
               onChange={(value) => patch({ notifyLowDisk: value })}
             />
@@ -261,7 +260,7 @@ export function SettingsTab() {
 
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-[11px] text-slate-400">
-              Порог свободного места, %
+              {t("Порог свободного места, %")}
               <input
                 type="number"
                 min={1}
@@ -273,7 +272,7 @@ export function SettingsTab() {
               />
             </label>
             <label className="text-[11px] text-slate-400">
-              Повтор не чаще, минут
+              {t("Повтор не чаще, минут")}
               <input
                 type="number"
                 min={5}
@@ -288,7 +287,7 @@ export function SettingsTab() {
 
           <div className="mt-3 flex items-center justify-between gap-3">
             <p className="text-[11px] text-slate-500">
-              Проверка выполняется каждые 3 минуты в фоне.
+              {t("Проверка выполняется каждые 3 минуты в фоне.")}
             </p>
             <Button
               size="sm"
@@ -296,7 +295,7 @@ export function SettingsTab() {
               loading={notifyMutation.isPending}
               onClick={() => void testNotification()}
             >
-              Проверить
+              {t("Проверить уведомление")}
             </Button>
           </div>
           {notifyResult ? (
@@ -306,11 +305,11 @@ export function SettingsTab() {
           <div className="my-2 h-px bg-white/[0.06]" />
 
           <SettingRow
-            title="Итог быстрой очистки"
-            description="Уведомление после очистки из меню в трее."
+            title={t("Итог быстрой очистки")}
+            description={t("Уведомление после очистки из меню в трее.")}
           >
             <Switch
-              label="Уведомлять об итоге быстрой очистки"
+              label={t("Уведомлять об итоге быстрой очистки")}
               checked={settings.quickCleanNotify}
               onChange={(value) => patch({ quickCleanNotify: value })}
             />
@@ -320,17 +319,16 @@ export function SettingsTab() {
         <Card className="p-4">
           <div className="mb-2 flex items-center gap-2">
             <FolderIcon className="size-4 text-emerald-300" />
-            <p className="text-sm font-medium text-white">Защищённые папки</p>
+            <p className="text-sm font-medium text-white">{t("Защищённые папки")}</p>
             <Badge variant="neutral">{settings.protectPaths.length}</Badge>
           </div>
           <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
-            Удаление и очистка никогда не трогают файлы внутри этих папок. Проверка работает для
-            больших файлов, дубликатов, анализа диска и категорий очистки.
+            {t("Удаление и очистка никогда не трогают файлы внутри этих папок. Проверка работает для больших файлов, дубликатов, анализа диска и категорий очистки.")}
           </p>
 
           {settings.protectPaths.length === 0 ? (
             <p className="rounded-lg border border-dashed border-white/10 px-3 py-4 text-center text-[11px] text-slate-500">
-              Пока ничего не защищено.
+              {t("Пока ничего не защищено.")}
             </p>
           ) : (
             <div className="space-y-1.5">
@@ -346,7 +344,7 @@ export function SettingsTab() {
                   <button
                     onClick={() => removeProtectedFolder(path)}
                     className="grid size-6 shrink-0 place-items-center rounded text-slate-500 hover:bg-rose-500/15 hover:text-rose-300"
-                    title="Убрать из защищённых"
+                    title={t("Убрать из защищённых")}
                   >
                     <TrashIcon className="size-3.5" />
                   </button>
@@ -357,25 +355,24 @@ export function SettingsTab() {
 
           <Button className="mt-3" size="sm" variant="secondary" onClick={() => void addProtectedFolder()}>
             <FolderIcon className="size-3.5" />
-            Добавить папку
+            {t("Добавить папку")}
           </Button>
           <p className="mt-2 text-[10px] text-slate-600">
-            Изменения применяются после нажатия «Сохранить».
+            {t("Изменения применяются после нажатия «Сохранить».")}
           </p>
         </Card>
 
         <Card className="p-4">
           <div className="mb-2 flex items-center gap-2">
             <SettingsIcon className="size-4 text-sky-300" />
-            <p className="text-sm font-medium text-white">Горячие клавиши</p>
+            <p className="text-sm font-medium text-white">{t("Горячие клавиши")}</p>
           </div>
           <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
-            Работают глобально. Формат: <code className="text-slate-300">CmdOrCtrl+Alt+D</code>.
-            Пустое поле отключает клавишу. Если сочетание занято, будет показана ошибка.
+            {t("Работают глобально. Формат:")} <code className="text-slate-300">CmdOrCtrl+Alt+D</code>{t(". Пустое поле отключает клавишу. Если сочетание занято, будет показана ошибка.")}
           </p>
 
           <label className="block text-[11px] text-slate-400">
-            Открыть Диск-Мастер
+            {t("Открыть Диск-Мастер")}
             <input
               value={settings.hotkeyShow}
               onChange={(event) => patch({ hotkeyShow: event.target.value })}
@@ -384,7 +381,7 @@ export function SettingsTab() {
             />
           </label>
           <label className="mt-3 block text-[11px] text-slate-400">
-            Показать / скрыть виджет
+            {t("Показать / скрыть виджет")}
             <input
               value={settings.hotkeyWidget}
               onChange={(event) => patch({ hotkeyWidget: event.target.value })}
@@ -397,15 +394,15 @@ export function SettingsTab() {
         <Card className="p-4">
           <div className="mb-2 flex items-center gap-2">
             <RefreshIcon className="size-4 text-violet-300" />
-            <p className="text-sm font-medium text-white">Поведение и система</p>
+            <p className="text-sm font-medium text-white">{t("Поведение и система")}</p>
           </div>
 
           <SettingRow
-            title="Запускать при входе в Windows"
-            description="В обычном режиме — ярлык в автозапуске; в режиме администратора — задача Планировщика с повышенными правами."
+            title={t("Запускать при входе в Windows")}
+            description={t("В обычном режиме — ярлык в автозапуске; в режиме администратора — задача Планировщика с повышенными правами.")}
           >
             <Switch
-              label="Запускать при входе в Windows"
+              label={t("Запускать при входе в Windows")}
               checked={Boolean(state?.autostart)}
               disabled={Boolean(state?.portable) || autostartMutation.isPending}
               onChange={(value) => void toggleAutostart(value)}
@@ -415,11 +412,11 @@ export function SettingsTab() {
           <div className="my-2 h-px bg-white/[0.06]" />
 
           <SettingRow
-            title="Всегда запускать с правами администратора"
-            description="Ручной запуск попросит UAC; автозапуск при входе пойдёт через Планировщик с повышенными правами — без запроса. Применяется после «Сохранить»."
+            title={t("Всегда запускать с правами администратора")}
+            description={t("Ручной запуск попросит UAC; автозапуск при входе пойдёт через Планировщик с повышенными правами — без запроса. Применяется после «Сохранить».")}
           >
             <Switch
-              label="Всегда запускать с правами администратора"
+              label={t("Всегда запускать с правами администратора")}
               checked={settings.alwaysAdmin}
               disabled={Boolean(state?.portable)}
               onChange={(value) => patch({ alwaysAdmin: value })}
@@ -429,11 +426,11 @@ export function SettingsTab() {
           <div className="my-2 h-px bg-white/[0.06]" />
 
           <SettingRow
-            title="Закрывать в трей"
-            description="Кнопка закрытия прячет окно, приложение продолжает работать."
+            title={t("Закрывать в трей")}
+            description={t("Кнопка закрытия прячет окно, приложение продолжает работать.")}
           >
             <Switch
-              label="Закрывать в трей"
+              label={t("Закрывать в трей")}
               checked={settings.minimizeToTray}
               onChange={(value) => patch({ minimizeToTray: value })}
             />
@@ -444,7 +441,7 @@ export function SettingsTab() {
           <div className="flex flex-wrap gap-2 pt-1">
             <Button size="sm" variant="secondary" onClick={() => void exportSettings()}>
               <DownloadIcon className="size-3.5" />
-              Экспорт настроек
+              {t("Экспорт настроек")}
             </Button>
             <Button
               size="sm"
@@ -453,11 +450,11 @@ export function SettingsTab() {
               loading={importMutation.isPending}
             >
               <DownloadIcon className="size-3.5 rotate-180" />
-              Импорт настроек
+              {t("Импорт настроек")}
             </Button>
           </div>
           <p className="mt-2 text-[10px] text-slate-600">
-            Экспорт содержит только настройки, без истории и данных дисков.
+            {t("Экспорт содержит только настройки, без истории и данных дисков.")}
           </p>
         </Card>
       </div>

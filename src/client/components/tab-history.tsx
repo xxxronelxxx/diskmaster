@@ -5,12 +5,10 @@ import { queryClient } from "@/client/rpc-client";
 import { formatBytes, formatDate } from "@/client/lib/format";
 import { Badge, Button, Card, EmptyState, SectionTitle } from "./ui";
 import { ArrowRightIcon, GaugeIcon, RefreshIcon } from "./icons";
+import { t } from "@/client/i18n";
 
 function formatAxis(bytes: number): string {
-  const gb = bytes / 1024 ** 3;
-  if (gb >= 1) return `${gb.toFixed(2)} ГБ`;
-  const mb = bytes / 1024 ** 2;
-  return `${mb.toFixed(1)} МБ`;
+  return formatBytes(bytes, 2);
 }
 
 function DriveChart({
@@ -75,15 +73,15 @@ function DriveChart({
             {letter}
           </span>
           <span className="text-xs text-slate-300">
-            сейчас {formatBytes(last.used)} из {formatBytes(capacity)}
+            {t("сейчас")} {formatBytes(last.used)} {t("из")} {formatBytes(capacity)}
           </span>
         </div>
         {perDay === null ? (
-          <Badge variant="neutral">мало данных для тренда</Badge>
+          <Badge variant="neutral">{t("мало данных для тренда")}</Badge>
         ) : (
           <Badge variant={perDay > 0 ? "warn" : "success"}>
             {perDay > 0 ? "+" : ""}
-            {formatBytes(Math.abs(perDay), 0)}/день {perDay > 0 ? "растёт" : "освобождается"}
+            {formatBytes(Math.abs(perDay), 0)}{t("/день")} {perDay > 0 ? t("растёт") : t("освобождается")}
           </Badge>
         )}
       </div>
@@ -163,12 +161,12 @@ export function HistoryTab() {
   return (
     <div className="space-y-5">
       <SectionTitle
-        title="История места на диске"
-        subtitle="Снимки свободного места каждые 30 минут — видно, как быстро диск заполняется"
+        title={t("История места на диске")}
+        subtitle={t("Снимки свободного места каждые 30 минут — видно, как быстро диск заполняется")}
         action={
           <Button variant="secondary" onClick={capture} loading={capturing}>
             <RefreshIcon className="size-4" />
-            Снять сейчас
+            {t("Снять сейчас")}
           </Button>
         }
       />
@@ -177,8 +175,7 @@ export function HistoryTab() {
         <Card className="border-amber-400/25 bg-amber-400/[0.06] p-3.5">
           <p className="flex items-center gap-2 text-xs text-amber-200">
             <ArrowRightIcon className="size-3.5" />
-            В среднем занятое место растёт на {formatBytes(summary.growthPerDay, 0)} в день —
-            за месяц это {formatBytes(summary.growthPerDay * 30, 1)}
+            {t("В среднем занятое место растёт на")} {formatBytes(summary.growthPerDay, 0)} {t("в день — за месяц это")} {formatBytes(summary.growthPerDay * 30, 1)}
           </p>
         </Card>
       ) : null}
@@ -186,11 +183,11 @@ export function HistoryTab() {
       {points.length === 0 ? (
         <EmptyState
           icon={<GaugeIcon className="size-6" />}
-          title="История пока пуста"
-          description="Первый снимок создаётся сразу, дальше — автоматически каждые полчаса (и при каждом запуске приложения). Через несколько дней здесь появится тренд расхода места."
+          title={t("История пока пуста")}
+          description={t("Первый снимок создаётся сразу, дальше — автоматически каждые полчаса (и при каждом запуске приложения). Через несколько дней здесь появится тренд расхода места.")}
           action={
             <Button variant="primary" onClick={capture} loading={capturing}>
-              Сделать первый снимок
+              {t("Сделать первый снимок")}
             </Button>
           }
         />
@@ -206,7 +203,7 @@ export function HistoryTab() {
         <Card className="overflow-hidden">
           <div className="border-b border-white/[0.08] px-4 py-2.5">
             <p className="text-[13px] font-medium text-white">
-              {points.length} снимков · с {formatDate(points[0].t)}
+              {points.length} {t("снимков · с")} {formatDate(points[0].t)}
             </p>
           </div>
           <div className="max-h-64 divide-y divide-white/[0.05] overflow-auto">
@@ -238,11 +235,11 @@ export function HistoryTab() {
 
       <Card className="overflow-hidden">
         <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-2.5">
-          <p className="text-[13px] font-medium text-white">Последние очистки</p>
-          <span className="text-[10px] text-slate-500">{cleanHistory.length} записей</span>
+          <p className="text-[13px] font-medium text-white">{t("Последние очистки")}</p>
+          <span className="text-[10px] text-slate-500">{cleanHistory.length} {t("записей")}</span>
         </div>
         {cleanHistory.length === 0 ? (
-          <p className="px-4 py-3 text-[11px] text-slate-500">Пока нет записей.</p>
+          <p className="px-4 py-3 text-[11px] text-slate-500">{t("Пока нет записей.")}</p>
         ) : (
           <div className="divide-y divide-white/[0.05]">
             {cleanHistory.slice(0, 20).map((entry, index) => (
@@ -259,10 +256,10 @@ export function HistoryTab() {
                   {entry.action}
                 </span>
                 <span className="tabular-nums text-slate-200">{formatBytes(entry.bytes)}</span>
-                <span className="text-slate-500">{entry.files} объектов</span>
+                <span className="text-slate-500">{entry.files} {t("объектов")}</span>
                 <span className="text-slate-600">{entry.trigger}</span>
                 {entry.errors.length > 0 ? (
-                  <span className="text-amber-300/80">{entry.errors.length} ошибок</span>
+                  <span className="text-amber-300/80">{entry.errors.length} {t("ошибок")}</span>
                 ) : null}
               </div>
             ))}

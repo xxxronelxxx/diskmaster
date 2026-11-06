@@ -5,6 +5,7 @@ import { queryClient, rpcClient } from "@/client/rpc-client";
 import { formatCount } from "@/client/lib/format";
 import { Badge, Button, Card, EmptyState, Modal, SectionTitle } from "./ui";
 import { AlertIcon, CheckIcon, PackageIcon, RefreshIcon, SearchIcon, TrashIcon } from "./icons";
+import { t } from "@/client/i18n";
 
 type Filter = "all" | "user" | "system" | "disabled";
 
@@ -47,8 +48,8 @@ export function StartupTab() {
     const response = await toggleMutation.mutateAsync({ id: item.id, enabled: !item.enabled });
     setMessage(
       response.ok
-        ? { ok: true, text: `${item.name}: ${item.enabled ? "отключено" : "включено"}` }
-        : { ok: false, text: response.error ?? "Не удалось изменить элемент" },
+        ? { ok: true, text: `${item.name}: ${item.enabled ? t("отключено") : t("включено")}` }
+        : { ok: false, text: response.error ?? t("Не удалось изменить элемент") },
     );
     await listQuery.refetch();
   }
@@ -58,8 +59,8 @@ export function StartupTab() {
     const response = await deleteMutation.mutateAsync({ id: pendingDelete.id });
     setMessage(
       response.ok
-        ? { ok: true, text: `${pendingDelete.name} удалён из автозагрузки` }
-        : { ok: false, text: response.error ?? "Не удалось удалить запись" },
+        ? { ok: true, text: t("{name} удалён из автозагрузки", { name: pendingDelete.name }) }
+        : { ok: false, text: response.error ?? t("Не удалось удалить запись") },
     );
     setPendingDelete(null);
     await listQuery.refetch();
@@ -68,12 +69,14 @@ export function StartupTab() {
   return (
     <div className="space-y-5">
       <SectionTitle
-        title="Автозагрузка"
-        subtitle={`${formatCount(enabledCount)} программ запускается при входе · реестр, папка Startup и планировщик`}
+        title={t("Автозагрузка")}
+        subtitle={t("{count} программ запускается при входе · реестр, папка Startup и планировщик", {
+          count: formatCount(enabledCount),
+        })}
         action={
           <Button variant="secondary" onClick={() => void listQuery.refetch()} loading={listQuery.isFetching}>
             <RefreshIcon className="size-4" />
-            Обновить
+            {t("Обновить")}
           </Button>
         }
       />
@@ -103,17 +106,17 @@ export function StartupTab() {
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Поиск по имени, команде или издателю"
+            placeholder={t("Поиск по имени, команде или издателю")}
             className="w-full rounded-xl border border-white/10 bg-white/[0.04] py-2 pl-9 pr-3 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-emerald-400/40"
           />
         </div>
         <div className="flex overflow-hidden rounded-xl border border-white/10">
           {(
             [
-              ["user", "Программы"],
-              ["system", "Системные"],
-              ["disabled", "Отключённые"],
-              ["all", "Все"],
+              ["user", t("Программы")],
+              ["system", t("Системные")],
+              ["disabled", t("Отключённые")],
+              ["all", t("Все")],
             ] as [Filter, string][]
           ).map(([key, label]) => (
             <button
@@ -142,8 +145,8 @@ export function StartupTab() {
       {!listQuery.isLoading && filtered.length === 0 ? (
         <EmptyState
           icon={<PackageIcon className="size-6" />}
-          title="Записей не найдено"
-          description="В этой категории нет элементов автозагрузки."
+          title={t("Записей не найдено")}
+          description={t("В этой категории нет элементов автозагрузки.")}
         />
       ) : null}
 
@@ -160,18 +163,18 @@ export function StartupTab() {
                 <div className="flex flex-wrap items-center gap-1.5">
                   <p className="truncate text-[13px] font-medium text-slate-100">{item.name}</p>
                   <Badge variant={item.enabled ? "success" : "neutral"}>
-                    {item.enabled ? "включено" : "отключено"}
+                    {item.enabled ? t("включено") : t("отключено")}
                   </Badge>
                   <Badge variant="neutral">
                     {item.source === "registry"
-                      ? "реестр"
+                      ? t("реестр")
                       : item.source === "startup-folder"
-                        ? "папка"
-                        : "планировщик"}
+                        ? t("папка")
+                        : t("планировщик")}
                   </Badge>
                   {!item.exists && item.executable ? (
                     <Badge variant="warn">
-                      <AlertIcon className="size-3" /> файл не найден
+                      <AlertIcon className="size-3" /> {t("файл не найден")}
                     </Badge>
                   ) : null}
                 </div>
@@ -193,7 +196,7 @@ export function StartupTab() {
                   className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-40 ${
                     item.enabled ? "bg-emerald-500" : "bg-white/15"
                   }`}
-                  title={item.enabled ? "Отключить" : "Включить"}
+                  title={item.enabled ? t("Отключить") : t("Включить")}
                 >
                   <span
                     className={`absolute top-0.5 size-5 rounded-full bg-white transition-[left] ${
@@ -205,15 +208,15 @@ export function StartupTab() {
                   <button
                     onClick={() => void rpcClient.system.reveal({ path: item.executable! })}
                     className="rounded-lg px-1.5 py-1 text-[10px] text-slate-500 hover:bg-white/10 hover:text-slate-200"
-                    title="Показать в проводнике"
+                    title={t("Показать в проводнике")}
                   >
-                    файл
+                    {t("файл")}
                   </button>
                 ) : null}
                 <button
                   onClick={() => setPendingDelete(item)}
                   className="grid size-7 place-items-center rounded-lg text-slate-600 transition-colors hover:bg-rose-500/15 hover:text-rose-300"
-                  title="Удалить из автозагрузки"
+                  title={t("Удалить из автозагрузки")}
                 >
                   <TrashIcon className="size-3.5" />
                 </button>
@@ -226,23 +229,22 @@ export function StartupTab() {
       <Modal
         open={Boolean(pendingDelete)}
         onClose={() => setPendingDelete(null)}
-        title="Удалить из автозагрузки?"
+        title={t("Удалить из автозагрузки?")}
         description={
           pendingDelete ? (
             <>
-              <b className="text-white">{pendingDelete.name}</b> больше не будет запускаться при
-              входе в систему. Сама программа останется установленной — её можно запускать вручную.
+              <b className="text-white">{pendingDelete.name}</b> {t("больше не будет запускаться при входе в систему. Сама программа останется установленной — её можно запускать вручную.")}
             </>
           ) : null
         }
         footer={
           <>
             <Button variant="ghost" onClick={() => setPendingDelete(null)}>
-              Отмена
+              {t("Отмена")}
             </Button>
             <Button variant="danger" onClick={confirmDelete} loading={deleteMutation.isPending}>
               <TrashIcon className="size-4" />
-              Удалить запись
+              {t("Удалить запись")}
             </Button>
           </>
         }

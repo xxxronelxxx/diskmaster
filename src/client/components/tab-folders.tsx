@@ -14,6 +14,7 @@ import {
   SpinnerIcon,
   TrashIcon,
 } from "./icons";
+import { t, translateError } from "@/client/i18n";
 
 type SortKey = "size" | "name" | "files";
 
@@ -68,7 +69,7 @@ function ContextMenu({
         <p className="truncate text-[11px] font-medium text-slate-200">{state.entry.name}</p>
         <p className="text-[10px] text-slate-500">
           {formatBytes(state.entry.size)}
-          {state.entry.isDir ? ` · ${formatCount(state.entry.files)} файлов` : ""}
+          {state.entry.isDir ? t(" · {files} файлов", { files: formatCount(state.entry.files) }) : ""}
         </p>
       </div>
       {state.entry.isDir ? (
@@ -79,7 +80,7 @@ function ContextMenu({
           }}
           className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-slate-300 transition-colors hover:bg-white/[0.07]"
         >
-          Показать содержимое
+          {t("Показать содержимое")}
         </button>
       ) : null}
       <button
@@ -89,7 +90,7 @@ function ContextMenu({
         }}
         className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-slate-300 transition-colors hover:bg-white/[0.07]"
       >
-        Показать в проводнике
+        {t("Показать в проводнике")}
       </button>
       <button
         onClick={() => {
@@ -99,7 +100,7 @@ function ContextMenu({
         className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-rose-300 transition-colors hover:bg-rose-500/15"
       >
         <TrashIcon className="size-3.5" />
-        Удалить · {formatBytes(state.entry.size)}
+        {t("Удалить ·")} {formatBytes(state.entry.size)}
       </button>
     </div>
   );
@@ -175,7 +176,7 @@ function FolderNode({
               : "text-transparent"
           }`}
           tabIndex={entry.isDir && entry.children > 0 ? 0 : -1}
-          aria-label={expanded ? "Свернуть" : "Развернуть"}
+          aria-label={expanded ? t("Свернуть") : t("Развернуть")}
         >
           {childrenQuery.isFetching ? (
             <SpinnerIcon className="size-3" />
@@ -197,7 +198,7 @@ function FolderNode({
             </p>
             {entry.isDir ? (
               <span className="shrink-0 text-[10px] text-slate-600">
-                {formatCount(entry.children)} объ.
+                {formatCount(entry.children)} {t("объ.")}
               </span>
             ) : null}
           </div>
@@ -220,7 +221,7 @@ function FolderNode({
         <div className="shrink-0 text-right">
           <p className="text-[13px] font-semibold tabular-nums text-white">{formatBytes(entry.size)}</p>
           <p className="text-[10px] text-slate-600">
-            {entry.isDir ? `${formatCount(entry.files)} файлов` : formatDate(entry.modified)}
+            {entry.isDir ? t("{files} файлов", { files: formatCount(entry.files) }) : formatDate(entry.modified)}
           </p>
         </div>
 
@@ -230,7 +231,7 @@ function FolderNode({
             onDelete(entry);
           }}
           className="grid size-7 shrink-0 place-items-center rounded-lg text-slate-600 opacity-0 transition-opacity hover:bg-rose-500/15 hover:text-rose-300 group-hover:opacity-100"
-          title="Удалить"
+          title={t("Удалить")}
         >
           <TrashIcon className="size-3.5" />
         </button>
@@ -242,14 +243,14 @@ function FolderNode({
             className="flex items-center gap-2 py-2 text-[11px] text-slate-500"
             style={{ paddingLeft: 34 + depth * 18 }}
           >
-            <SpinnerIcon className="size-3" /> Считаем размеры…
+            <SpinnerIcon className="size-3" /> {t("Считаем размеры…")}
           </div>
         ) : children.length === 0 ? (
           <div
             className="py-1.5 text-[11px] text-slate-600"
             style={{ paddingLeft: 34 + depth * 18 }}
           >
-            пусто
+            {t("пусто")}
           </div>
         ) : (
           children.map((child, index) => (
@@ -360,8 +361,15 @@ export function FoldersTab() {
     setPending(null);
     setResult(
       response.errors.length > 0
-        ? `Удалено ${formatBytes(response.bytes)}, ошибки: ${response.errors.slice(0, 2).join("; ")}`
-        : `Удалено ${formatBytes(response.bytes)} (${formatCount(response.files)} файлов): ${names}`,
+        ? t("Удалено {bytes}, ошибки: {errors}", {
+            bytes: formatBytes(response.bytes),
+            errors: response.errors.slice(0, 2).map(translateError).join("; "),
+          })
+        : t("Удалено {bytes} ({files} файлов): {names}", {
+            bytes: formatBytes(response.bytes),
+            files: formatCount(response.files),
+            names,
+          }),
     );
     await analysisQuery.refetch();
   }
@@ -386,8 +394,8 @@ export function FoldersTab() {
   return (
     <div className="space-y-4">
       <SectionTitle
-        title="Анализ диска"
-        subtitle="Как ncdu: раскрывайте папки стрелкой и удаляйте выборочно — файл или отдельную подпапку"
+        title={t("Анализ диска")}
+        subtitle={t("Как ncdu: раскрывайте папки стрелкой и удаляйте выборочно — файл или отдельную подпапку")}
         action={
           <Button
             variant="secondary"
@@ -395,7 +403,7 @@ export function FoldersTab() {
             loading={analysisQuery.isFetching}
           >
             <RefreshIcon className="size-4" />
-            Пересчитать
+            {t("Пересчитать")}
           </Button>
         }
       />
@@ -449,7 +457,7 @@ export function FoldersTab() {
 
       {analysisQuery.isLoading ? (
         <Card className="flex items-center gap-2 p-4 text-xs text-slate-400">
-          <SpinnerIcon className="size-4" /> Считаем размеры папок…
+          <SpinnerIcon className="size-4" /> {t("Считаем размеры папок…")}
         </Card>
       ) : null}
 
@@ -458,11 +466,11 @@ export function FoldersTab() {
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] px-4 py-2.5">
             <div>
               <p className="text-[13px] font-medium text-white">
-                {formatBytes(total)} · {formatCount(analysis.files)} файлов
+                {formatBytes(total)} · {formatCount(analysis.files)} {t("файлов")}
               </p>
               <p className="text-[10px] text-slate-500">
-                {formatCount(entries.length)} элементов · {analysis.elapsedMs} мс
-                {analysis.truncated ? " · расчёт ограничен по времени" : ""}
+                {formatCount(entries.length)} {t("элементов ·")} {analysis.elapsedMs} {t("мс")}
+                {analysis.truncated ? t(" · расчёт ограничен по времени") : ""}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -475,13 +483,13 @@ export function FoldersTab() {
                 }
                 className="rounded-lg border border-white/10 px-2 py-1 text-[11px] text-slate-400 transition-colors hover:bg-white/[0.07] hover:text-slate-200"
               >
-                {expandedPaths.size > 0 ? "Свернуть всё" : "Раскрыть всё"}
+                {expandedPaths.size > 0 ? t("Свернуть всё") : t("Раскрыть всё")}
               </button>
               <div className="flex gap-1 rounded-lg border border-white/10 p-0.5">
                 {(
                   [
-                    ["list", "Список"],
-                    ["map", "Карта"],
+                    ["list", t("Список")],
+                    ["map", t("Карта")],
                   ] as ["list" | "map", string][]
                 ).map(([key, label]) => (
                   <button
@@ -498,9 +506,9 @@ export function FoldersTab() {
               <div className="flex gap-1 rounded-lg border border-white/10 p-0.5">
                 {(
                   [
-                    ["size", "Размер"],
-                    ["files", "Файлы"],
-                    ["name", "Имя"],
+                    ["size", t("Размер")],
+                    ["files", t("Файлы")],
+                    ["name", t("Имя")],
                   ] as [SortKey, string][]
                 ).map(([key, label]) => (
                   <button
@@ -544,16 +552,16 @@ export function FoldersTab() {
       {analysis && entries.length === 0 && !analysis.error ? (
         <EmptyState
           icon={<FolderIcon className="size-6" />}
-          title="Папка пуста"
-          description="Здесь нет файлов и подпапок."
+          title={t("Папка пуста")}
+          description={t("Здесь нет файлов и подпапок.")}
         />
       ) : null}
 
       {!analysis && !analysisQuery.isLoading ? (
         <EmptyState
           icon={<FolderIcon className="size-6" />}
-          title="Выберите папку"
-          description="Начните с домашней папки или любого диска, чтобы увидеть, что занимает место."
+          title={t("Выберите папку")}
+          description={t("Начните с домашней папки или любого диска, чтобы увидеть, что занимает место.")}
         />
       ) : null}
 
@@ -572,27 +580,27 @@ export function FoldersTab() {
       <Modal
         open={Boolean(pending)}
         onClose={() => setPending(null)}
-        title={permanent ? "Удалить безвозвратно?" : "Переместить в корзину?"}
+        title={permanent ? t("Удалить безвозвратно?") : t("Переместить в корзину?")}
         description={
           pending ? (
             <>
               <b className="text-white">{pending[0]?.name}</b>
-              {pending.length > 1 ? ` и ещё ${pending.length - 1}` : ""} —{" "}
+              {pending.length > 1 ? t(" и ещё {count}", { count: pending.length - 1 }) : ""} —{" "}
               {formatBytes(pending.reduce((sum, entry) => sum + entry.size, 0))}
               {permanent
-                ? ". Файлы будут удалены окончательно, восстановить их нельзя."
-                : ". Их можно будет восстановить из корзины."}
+                ? t(". Файлы будут удалены окончательно, восстановить их нельзя.")
+                : t(". Их можно будет восстановить из корзины.")}
             </>
           ) : null
         }
         footer={
           <>
             <Button variant="ghost" onClick={() => setPending(null)}>
-              Отмена
+              {t("Отмена")}
             </Button>
             <Button variant="danger" onClick={confirmDelete} loading={deleteMutation.isPending}>
               <TrashIcon className="size-4" />
-              {permanent ? "Удалить навсегда" : "В корзину"}
+              {permanent ? t("Удалить навсегда") : t("В корзину")}
             </Button>
           </>
         }
@@ -605,10 +613,9 @@ export function FoldersTab() {
             onChange={(event) => setPermanent(event.target.checked)}
           />
           <span className="text-[11px] leading-relaxed text-slate-400">
-            <span className="text-slate-200">Удалить безвозвратно</span>
+            <span className="text-slate-200">{t("Удалить безвозвратно")}</span>
             <span className="mt-0.5 block text-slate-500">
-              Быстрее и освобождает место сразу, но восстановление невозможно. Папки в корзину
-              перемещаются через Windows.
+              {t("Быстрее и освобождает место сразу, но восстановление невозможно. Папки в корзину перемещаются через Windows.")}
             </span>
           </span>
         </label>

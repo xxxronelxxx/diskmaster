@@ -15,6 +15,7 @@ import {
   SpinnerIcon,
   TrashIcon,
 } from "./icons";
+import { t } from "@/client/i18n";
 
 type SortKey = "size" | "name" | "date";
 
@@ -74,8 +75,11 @@ export function ProgramsTab({ admin }: { admin: boolean }) {
   return (
     <div className="space-y-5">
       <SectionTitle
-        title="Установленные программы"
-        subtitle={`${formatCount(programs.length)} программ · ${formatBytes(totalSize)} по данным реестра`}
+        title={t("Установленные программы")}
+        subtitle={t("{count} программ · {size} по данным реестра", {
+          count: formatCount(programs.length),
+          size: formatBytes(totalSize),
+        })}
         action={
           <Button
             variant="secondary"
@@ -83,7 +87,7 @@ export function ProgramsTab({ admin }: { admin: boolean }) {
             loading={programsQuery.isFetching}
           >
             <RefreshIcon className="size-4" />
-            Обновить список
+            {t("Обновить список")}
           </Button>
         }
       />
@@ -91,8 +95,7 @@ export function ProgramsTab({ admin }: { admin: boolean }) {
       {!admin ? (
         <div className="flex items-start gap-2.5 rounded-xl border border-amber-400/25 bg-amber-400/[0.07] px-3.5 py-2.5 text-[11px] leading-relaxed text-amber-200/90">
           <ShieldIcon className="mt-0.5 size-4 shrink-0" />
-          Программа запущена без прав администратора. Системные приложения не удалятся —
-          для них потребуются права администратора.
+          {t("Программа запущена без прав администратора. Системные приложения не удалятся — для них потребуются права администратора.")}
         </div>
       ) : null}
 
@@ -101,17 +104,16 @@ export function ProgramsTab({ admin }: { admin: boolean }) {
           <div className="flex items-start gap-3">
             <CheckIcon className="mt-0.5 size-4 shrink-0 text-emerald-300" />
             <div className="min-w-0 text-xs leading-relaxed text-emerald-100">
-              <p className="font-medium">Запущено удаление: {launched}</p>
+              <p className="font-medium">{t("Запущено удаление:")} {launched}</p>
               <p className="mt-0.5 text-emerald-200/70">
-                Подтвердите действия в окне установщика. Список обновится автоматически,
-                когда удаление завершится.
+                {t("Подтвердите действия в окне установщика. Список обновится автоматически, когда удаление завершится.")}
               </p>
             </div>
             <button
               className="ml-auto text-xs text-emerald-200/60 hover:text-emerald-100"
               onClick={() => setLaunched(null)}
             >
-              скрыть
+              {t("скрыть")}
             </button>
           </div>
         </Card>
@@ -123,16 +125,16 @@ export function ProgramsTab({ admin }: { admin: boolean }) {
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Поиск по названию или издателю"
+            placeholder={t("Поиск по названию или издателю")}
             className="w-full rounded-xl border border-white/10 bg-white/[0.04] py-2 pl-9 pr-3 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-emerald-400/40 focus:bg-white/[0.06]"
           />
         </div>
         <div className="flex overflow-hidden rounded-xl border border-white/10">
           {(
             [
-              ["size", "По размеру"],
-              ["name", "По имени"],
-              ["date", "По дате"],
+              ["size", t("По размеру")],
+              ["name", t("По имени")],
+              ["date", t("По дате")],
             ] as [SortKey, string][]
           ).map(([key, label]) => (
             <button
@@ -161,7 +163,7 @@ export function ProgramsTab({ admin }: { admin: boolean }) {
       {programsQuery.isError ? (
         <Card className="border-rose-400/30 bg-rose-500/[0.07] p-4 text-xs text-rose-200">
           <span className="flex items-center gap-2">
-            <AlertIcon className="size-4" /> Не удалось прочитать список программ из реестра.
+            <AlertIcon className="size-4" /> {t("Не удалось прочитать список программ из реестра.")}
           </span>
         </Card>
       ) : null}
@@ -169,9 +171,9 @@ export function ProgramsTab({ admin }: { admin: boolean }) {
       {!programsQuery.isLoading && filtered.length === 0 ? (
         <Card className="p-8 text-center">
           <PackageIcon className="mx-auto size-8 text-slate-500" />
-          <p className="mt-2 text-sm text-slate-200">Ничего не найдено</p>
+          <p className="mt-2 text-sm text-slate-200">{t("Ничего не найдено")}</p>
           <p className="mt-1 text-xs text-slate-500">
-            {programs.length === 0 ? "Список программ пуст" : "Измените запрос поиска"}
+            {programs.length === 0 ? t("Список программ пуст") : t("Измените запрос поиска")}
           </p>
         </Card>
       ) : null}
@@ -179,10 +181,10 @@ export function ProgramsTab({ admin }: { admin: boolean }) {
       {filtered.length > 0 ? (
         <Card className="overflow-hidden">
           <div className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-white/[0.08] px-4 py-2.5 text-[10px] uppercase tracking-wide text-slate-500 sm:grid-cols-[1fr_110px_96px_130px]">
-            <span>Программа</span>
-            <span className="hidden sm:block">Версия</span>
-            <span className="text-right">Размер</span>
-            <span className="text-right">Действие</span>
+            <span>{t("Программа")}</span>
+            <span className="hidden sm:block">{t("Версия")}</span>
+            <span className="text-right">{t("Размер")}</span>
+            <span className="text-right">{t("Действие")}</span>
           </div>
           <div className="divide-y divide-white/[0.06]">
             {filtered.map((program) => (
@@ -195,20 +197,20 @@ export function ProgramsTab({ admin }: { admin: boolean }) {
                     {program.name}
                   </p>
                   <p className="truncate text-[11px] text-slate-500">
-                    {program.publisher || "Издатель неизвестен"}
-                    {program.installDate ? ` · ${formatDate(program.installDate)}` : ""}
+                    {program.publisher || t("Издатель неизвестен")}
+                    {program.installDate ? t(" · {date}", { date: formatDate(program.installDate) }) : ""}
                   </p>
                   {program.location ? (
                     <button
                       onClick={() => void rpcClient.system.reveal({ path: program.location! })}
                       className="mt-0.5 flex max-w-full items-center gap-1 truncate font-mono text-[10px] text-slate-600 transition-colors hover:text-emerald-300"
-                      title={`Открыть папку установки: ${program.location}`}
+                      title={t("Открыть папку установки: {path}", { path: program.location })}
                     >
                       <FolderIcon className="size-3 shrink-0" />
                       <span className="truncate">{program.location}</span>
                     </button>
                   ) : (
-                    <p className="mt-0.5 text-[10px] text-slate-500">путь не указан в реестре</p>
+                    <p className="mt-0.5 text-[10px] text-slate-500">{t("путь не указан в реестре")}</p>
                   )}
                 </div>
                 <span className="hidden truncate text-xs text-slate-400 sm:block" title={program.version ?? ""}>
@@ -229,10 +231,10 @@ export function ProgramsTab({ admin }: { admin: boolean }) {
                       }}
                     >
                       <TrashIcon className="size-3.5" />
-                      Удалить
+                      {t("Удалить")}
                     </Button>
                   ) : (
-                    <Badge variant="neutral">нет удаления</Badge>
+                    <Badge variant="neutral">{t("нет удаления")}</Badge>
                   )}
                 </div>
               </div>
@@ -244,7 +246,7 @@ export function ProgramsTab({ admin }: { admin: boolean }) {
       <Modal
         open={Boolean(pending)}
         onClose={() => setPending(null)}
-        title="Удалить программу?"
+        title={t("Удалить программу?")}
         description={
           pending ? (
             <>
@@ -257,11 +259,11 @@ export function ProgramsTab({ admin }: { admin: boolean }) {
         footer={
           <>
             <Button variant="ghost" onClick={() => setPending(null)}>
-              Отмена
+              {t("Отмена")}
             </Button>
             <Button variant="danger" onClick={handleUninstall} loading={uninstallMutation.isPending}>
               <TrashIcon className="size-4" />
-              Удалить
+              {t("Удалить")}
             </Button>
           </>
         }
@@ -280,11 +282,11 @@ export function ProgramsTab({ admin }: { admin: boolean }) {
               onChange={(event) => setQuiet(event.target.checked)}
             />
             <span>
-              <span className="text-slate-200">Тихое удаление</span>
+              <span className="text-slate-200">{t("Тихое удаление")}</span>
               <span className="mt-0.5 block text-[11px] text-slate-500">
                 {pending?.quietUninstallString
-                  ? "Без окон мастера, с параметрами издателя. Недоступно, если у программы нет тихого режима."
-                  : "У этой программы нет команды тихого удаления."}
+                  ? t("Без окон мастера, с параметрами издателя. Недоступно, если у программы нет тихого режима.")
+                  : t("У этой программы нет команды тихого удаления.")}
               </span>
             </span>
           </label>
@@ -297,13 +299,12 @@ export function ProgramsTab({ admin }: { admin: boolean }) {
 
           <p className="flex items-start gap-2 text-[11px] leading-relaxed text-slate-500">
             <AlertIcon className="mt-0.5 size-3.5 shrink-0" />
-            Откроется установщик программы. Не закрывайте его окно, пока удаление не
-            завершится.
+            {t("Откроется установщик программы. Не закрывайте его окно, пока удаление не завершится.")}
           </p>
 
           {uninstallMutation.isPending ? (
             <p className="flex items-center gap-2 text-[11px] text-slate-400">
-              <SpinnerIcon className="size-3.5" /> Запускаем установщик…
+              <SpinnerIcon className="size-3.5" /> {t("Запускаем установщик…")}
             </p>
           ) : null}
         </div>

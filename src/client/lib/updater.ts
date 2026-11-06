@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
+import { t } from "@/client/i18n";
 
 export type UpdaterStatus =
   | "idle"
@@ -58,7 +59,7 @@ export function useUpdater(): Updater {
     async (manual = true) => {
       if (portableRef.current) {
         await invoke("open_releases").catch(() => undefined);
-        flash("Портативная версия обновляется вручную — открыта страница релизов");
+        flash(t("Портативная версия обновляется вручную — открыта страница релизов"));
         return;
       }
 
@@ -78,12 +79,12 @@ export function useUpdater(): Updater {
         } else {
           setUpdate(null);
           setStatus("current");
-          if (manual) flash("Установлена последняя версия");
+          if (manual) flash(t("Установлена последняя версия"));
         }
       } catch (cause) {
         setStatus("error");
         if (manual) {
-          flash("Не удалось проверить обновления. Проверьте подключение к сети.");
+          flash(t("Не удалось проверить обновления. Проверьте подключение к сети."));
         }
         void invoke("log_event", {
           level: "warn",
@@ -151,7 +152,7 @@ export function useUpdater(): Updater {
       await relaunch();
     } catch (cause) {
       setStatus("error");
-      flash("Не удалось установить обновление");
+      flash(t("Не удалось установить обновление"));
       void invoke("log_event", {
         level: "error",
         message: `update install failed: ${String(cause)}`,

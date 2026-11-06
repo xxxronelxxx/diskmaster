@@ -6,6 +6,7 @@ import { queryClient, rpcClient } from "@/client/rpc-client";
 import { formatBytes, formatCount, formatDate, shortPath } from "@/client/lib/format";
 import { Badge, Button, Card, EmptyState, Modal, Progress, SectionTitle } from "./ui";
 import { AlertIcon, CheckIcon, FilesIcon, RefreshIcon, TrashIcon } from "./icons";
+import { t } from "@/client/i18n";
 
 const MIN_SIZES = [16, 64, 256, 1024];
 
@@ -119,8 +120,11 @@ export function DuplicatesTab() {
     });
     setNote(
       response.ok
-        ? `В корзину отправлено ${formatCount(response.files)} файлов · ${formatBytes(response.bytes)}`
-        : `Ошибки: ${response.errors.slice(0, 2).join("; ")}`,
+        ? t("В корзину отправлено {files} файлов · {bytes}", {
+            files: formatCount(response.files),
+            bytes: formatBytes(response.bytes),
+          })
+        : t("Ошибки: {errors}", { errors: response.errors.slice(0, 2).join("; ") }),
     );
     setPending(null);
   }
@@ -128,17 +132,17 @@ export function DuplicatesTab() {
   return (
     <div className="space-y-5">
       <SectionTitle
-        title="Дубликаты"
-        subtitle="Поиск одинаковых файлов по содержимому (BLAKE3), а не по имени"
+        title={t("Дубликаты")}
+        subtitle={t("Поиск одинаковых файлов по содержимому (BLAKE3), а не по имени")}
         action={
           scanMutation.isPending ? (
             <Button variant="danger" onClick={() => void cancelMutation.mutateAsync({})}>
-              Остановить
+              {t("Остановить")}
             </Button>
           ) : (
             <Button variant="primary" onClick={runScan}>
               <RefreshIcon className="size-4" />
-              {scan ? "Сканировать снова" : "Найти дубликаты"}
+              {scan ? t("Сканировать снова") : t("Найти дубликаты")}
             </Button>
           )
         }
@@ -149,23 +153,26 @@ export function DuplicatesTab() {
           <div className="flex items-baseline justify-between gap-2">
             <p className="text-xs text-slate-300">
               {progress.phase === "hashing"
-                ? "Считаем хэши файлов…"
-                : "Обходим файлы и группируем по размеру…"}
+                ? t("Считаем хэши файлов…")
+                : t("Обходим файлы и группируем по размеру…")}
             </p>
             <span className="text-[11px] tabular-nums text-slate-400">{progress.percent}%</span>
           </div>
           <Progress value={progress.percent} className="mt-2" />
           <p className="mt-2 text-[11px] text-slate-500">
-            просмотрено {formatCount(progress.scanned)} файлов
+            {t("просмотрено")} {formatCount(progress.scanned)} {t("файлов")}
             {progress.total > 0
-              ? ` · проверено ${formatCount(progress.hashed)} из ${formatCount(progress.total)}`
+              ? t(" · проверено {hashed} из {total}", {
+                  hashed: formatCount(progress.hashed),
+                  total: formatCount(progress.total),
+                })
               : ""}
           </p>
         </Card>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-slate-500">Минимальный размер файла:</span>
+        <span className="text-xs text-slate-500">{t("Минимальный размер файла:")}</span>
         {MIN_SIZES.map((value) => (
           <button
             key={value}
@@ -177,15 +184,15 @@ export function DuplicatesTab() {
                 : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/10"
             }`}
           >
-            {value >= 1024 ? "1 МБ" : `${value} КБ`}
+            {value >= 1024 ? t("1 МБ") : `${value} КБ`}
           </button>
         ))}
       </div>
 
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="text-slate-500">Папка:</span>
-        <span className="max-w-72 truncate rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-slate-300" title={root ?? "Домашняя папка"}>
-          {root ? shortPath(root, 48) : "Домашняя папка"}
+        <span className="text-slate-500">{t("Папка:")}</span>
+        <span className="max-w-72 truncate rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-slate-300" title={root ?? t("Домашняя папка")}>
+          {root ? shortPath(root, 48) : t("Домашняя папка")}
         </span>
         <Button
           size="sm"
@@ -199,7 +206,7 @@ export function DuplicatesTab() {
           }}
           disabled={scanMutation.isPending}
         >
-          Выбрать
+          {t("Выбрать")}
         </Button>
         {root ? (
           <Button
@@ -211,7 +218,7 @@ export function DuplicatesTab() {
             }}
             disabled={scanMutation.isPending}
           >
-            Сбросить
+            {t("Сбросить")}
           </Button>
         ) : null}
         <Button
@@ -227,7 +234,7 @@ export function DuplicatesTab() {
           }}
           disabled={scanMutation.isPending}
         >
-          + Исключение
+          {t("+ Исключение")}
         </Button>
         {exclude.map((path) => (
           <button
@@ -238,7 +245,7 @@ export function DuplicatesTab() {
               localStorage.setItem("dm.dup.exclude", JSON.stringify(next));
             }}
             className="max-w-56 truncate rounded-lg border border-rose-400/25 bg-rose-500/10 px-2 py-1 text-rose-200"
-            title={`Убрать исключение: ${path}`}
+            title={t("Убрать исключение: {path}", { path })}
           >
             {shortPath(path, 32)} ×
           </button>
@@ -246,12 +253,12 @@ export function DuplicatesTab() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="text-slate-500">При удалении копий оставлять:</span>
+        <span className="text-slate-500">{t("При удалении копий оставлять:")}</span>
         {([
-          ["first", "первый"],
-          ["newest", "самый новый"],
-          ["oldest", "самый старый"],
-          ["shortest", "короткий путь"],
+          ["first", t("первый")],
+          ["newest", t("самый новый")],
+          ["oldest", t("самый старый")],
+          ["shortest", t("короткий путь")],
         ] as const).map(([value, label]) => (
           <button
             key={value}
@@ -269,7 +276,7 @@ export function DuplicatesTab() {
       {scanMutation.isPending ? (
         <Card className="flex items-center gap-2 p-4 text-xs text-slate-300">
           <RefreshIcon className="size-4 animate-spin text-emerald-300" />
-          Считаем хэши файлов — на большом профиле это занимает до минуты…
+          {t("Считаем хэши файлов — на большом профиле это занимает до минуты…")}
         </Card>
       ) : null}
 
@@ -284,12 +291,12 @@ export function DuplicatesTab() {
       {scan && !scanMutation.isPending ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-gradient-to-br from-violet-500/[0.10] via-white/[0.03] to-transparent p-4">
           <div>
-            <p className="text-[11px] uppercase tracking-wide text-violet-300/70">Можно освободить</p>
+            <p className="text-[11px] uppercase tracking-wide text-violet-300/70">{t("Можно освободить")}</p>
             <p className="text-2xl font-semibold tracking-tight text-white">{formatBytes(totalWasted)}</p>
             <p className="text-xs text-slate-400">
-              {groups.length} групп · проверено {formatCount(scan.scannedFiles)} файлов за{" "}
-              {(scan.elapsedMs / 1000).toFixed(1)} с
-              {scan.truncated ? " · поиск ограничен по времени" : ""}
+              {groups.length} {t("групп · проверено")} {formatCount(scan.scannedFiles)} {t("файлов за")}{" "}
+              {(scan.elapsedMs / 1000).toFixed(1)} {t("с")}
+              {scan.truncated ? t(" · поиск ограничен по времени") : ""}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -299,7 +306,7 @@ export function DuplicatesTab() {
               disabled={groups.length === 0}
               onClick={() => void markAllDuplicates(true)}
             >
-              Удалить копии, оставить по одной
+              {t("Удалить копии, оставить по одной")}
             </Button>
             <Button
               variant="danger"
@@ -308,7 +315,7 @@ export function DuplicatesTab() {
               onClick={() => void markAllDuplicates(false)}
             >
               <TrashIcon className="size-3.5" />
-              Удалить все найденные
+              {t("Удалить все найденные")}
             </Button>
           </div>
         </div>
@@ -325,19 +332,19 @@ export function DuplicatesTab() {
       {scan && groups.length === 0 && !scanMutation.isPending ? (
         <EmptyState
           icon={<CheckIcon className="size-6" />}
-          title="Дубликатов не найдено"
-          description={`Файлов больше ${minSize} КБ с одинаковым содержимым нет. Можно снизить минимальный размер и проверить снова.`}
+          title={t("Дубликатов не найдено")}
+          description={t("Файлов больше {size} КБ с одинаковым содержимым нет. Можно снизить минимальный размер и проверить снова.", { size: minSize })}
         />
       ) : null}
 
       {!scan && !scanMutation.isPending ? (
         <EmptyState
           icon={<FilesIcon className="size-6" />}
-          title="Ещё не искали"
-          description="Просканируем домашнюю папку: сначала группировка по размеру, потом сравнение хэшей — так поиск остаётся быстрым."
+          title={t("Ещё не искали")}
+          description={t("Просканируем домашнюю папку: сначала группировка по размеру, потом сравнение хэшей — так поиск остаётся быстрым.")}
           action={
             <Button variant="primary" onClick={runScan}>
-              Найти дубликаты
+              {t("Найти дубликаты")}
             </Button>
           }
         />
@@ -348,9 +355,9 @@ export function DuplicatesTab() {
           <Card key={group.hash} className="overflow-hidden">
             <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.07] px-4 py-2.5">
               <Badge variant="info">{formatBytes(group.size)}</Badge>
-              <span className="text-xs text-slate-300">{group.files.length} копии</span>
+              <span className="text-xs text-slate-300">{group.files.length} {t("копии")}</span>
               <span className="text-[11px] text-slate-500">
-                лишних {formatBytes(group.wasted)}
+                {t("лишних")} {formatBytes(group.wasted)}
               </span>
               <div className="ml-auto flex items-center gap-2">
                 <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-slate-400">
@@ -367,11 +374,11 @@ export function DuplicatesTab() {
                       })
                     }
                   />
-                  оставить первый
+                  {t("оставить первый")}
                 </label>
                 <Button size="sm" variant="danger" onClick={() => markDuplicatesOf(group)}>
                   <TrashIcon className="size-3.5" />
-                  Удалить {keepFirst.has(group.hash) ? group.files.length - 1 : group.files.length}
+                  {t("Удалить")} {keepFirst.has(group.hash) ? group.files.length - 1 : group.files.length}
                 </Button>
               </div>
             </div>
@@ -385,7 +392,7 @@ export function DuplicatesTab() {
                         : "bg-white/[0.05] text-slate-500"
                     }`}
                   >
-                    {index === 0 && keepFirst.has(group.hash) ? "оставить" : `копия ${index + 1}`}
+                    {index === 0 && keepFirst.has(group.hash) ? t("оставить") : `копия ${index + 1}`}
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs text-slate-200" title={file.name}>
@@ -399,9 +406,9 @@ export function DuplicatesTab() {
                   <button
                     onClick={() => void rpcClient.system.reveal({ path: file.path })}
                     className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-slate-500 hover:bg-white/10 hover:text-slate-200"
-                    title="Показать в проводнике"
+                    title={t("Показать в проводнике")}
                   >
-                    открыть
+                    {t("открыть")}
                   </button>
                 </div>
               ))}
@@ -413,24 +420,23 @@ export function DuplicatesTab() {
       <Modal
         open={Boolean(pending)}
         onClose={() => setPending(null)}
-        title="Переместить дубликаты в корзину?"
+        title={t("Переместить дубликаты в корзину?")}
         description={
           pending ? (
             <>
-              {formatCount(pending.paths.length)} файлов на{" "}
-              <b className="text-white">{formatBytes(pending.bytes)}</b>. Они будут в корзине, пока вы
-              её не очистите.
+              {formatCount(pending.paths.length)} {t("файлов на")}{" "}
+              <b className="text-white">{formatBytes(pending.bytes)}</b>{t(". Они будут в корзине, пока вы её не очистите.")}
             </>
           ) : null
         }
         footer={
           <>
             <Button variant="ghost" onClick={() => setPending(null)}>
-              Отмена
+              {t("Отмена")}
             </Button>
             <Button variant="danger" onClick={confirmDelete} loading={deleteMutation.isPending}>
               <TrashIcon className="size-4" />
-              В корзину
+              {t("В корзину")}
             </Button>
           </>
         }

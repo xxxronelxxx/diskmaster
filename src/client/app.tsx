@@ -35,6 +35,8 @@ import { WidgetTab } from "./components/tab-widget";
 import { UpdateBanner } from "./components/update-banner";
 import { AboutModal } from "./components/about-modal";
 import { useUpdater } from "./lib/updater";
+import { useI18n } from "./i18n-provider";
+import { t } from "@/client/i18n";
 
 type TabId =
   | "overview"
@@ -100,6 +102,7 @@ function App() {
   const refreshedFor = useRef<string | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const updater = useUpdater();
+  const { locale } = useI18n();
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -169,7 +172,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--app-bg)] text-slate-200">
+    <div data-locale={locale} className="min-h-screen bg-[var(--app-bg)] text-slate-200">
       <div className="pointer-events-none fixed inset-x-0 top-0 h-72 bg-[radial-gradient(60%_100%_at_50%_0%,var(--app-glow),transparent_70%)]" />
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-[1500px]">
@@ -179,8 +182,8 @@ function App() {
               <GaugeIcon className="size-5" />
             </div>
             <div>
-              <p className="text-sm font-semibold tracking-tight text-white">Диск-Мастер</p>
-              <p className="text-[10px] text-slate-500">Windows · очистка и программы</p>
+              <p className="text-sm font-semibold tracking-tight text-white">{t("Диск-Мастер")}</p>
+              <p className="text-[10px] text-slate-500">{t("Windows · очистка и программы")}</p>
             </div>
           </div>
 
@@ -188,7 +191,7 @@ function App() {
             {GROUPS.map((group) => (
               <div key={group}>
                 <p className="px-2.5 pb-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-600">
-                  {group}
+                  {t(group)}
                 </p>
                 <div className="flex flex-col gap-0.5">
                   {TABS.filter((item) => item.group === group).map((item) => {
@@ -205,7 +208,7 @@ function App() {
                         }`}
                       >
                         <Icon className="size-4" />
-                        {item.label}
+                        {t(item.label)}
                         {item.id === "cleanup" && scanJob && !scanJob.finishedAt ? (
                           <span className="ml-auto size-1.5 animate-pulse rounded-full bg-sky-400" />
                         ) : null}
@@ -222,12 +225,13 @@ function App() {
               <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
                 <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-slate-500">
                   <ShieldIcon className="size-3" />
-                  {info.admin ? "Администратор" : "Обычные права"}
+                  {info.admin ? t("Администратор") : t("Обычные права")}
                 </div>
                 <p className="mt-1 truncate font-mono text-[11px] text-slate-400">{info.machine}</p>
                 <p className="mt-1 text-[11px] text-slate-500">
-                  свободно{" "}
-                  {formatBytes(info.drives.reduce((sum, drive) => sum + drive.free, 0))}
+                  {t("свободно {size}", {
+                    size: formatBytes(info.drives.reduce((sum, drive) => sum + drive.free, 0)),
+                  })}
                 </p>
               </div>
             ) : (
@@ -238,7 +242,7 @@ function App() {
               onClick={() => setAboutOpen(true)}
               className="w-full rounded-xl border border-white/[0.07] bg-white/[0.02] px-3 py-2 text-left text-[11px] text-slate-400 transition-colors hover:bg-white/[0.05] hover:text-slate-200"
             >
-              О программе · v{updater.version || "…"}
+              {t("О программе · v")}{updater.version || "…"}
             </button>
           </div>
         </aside>
@@ -250,14 +254,14 @@ function App() {
                 <div className="grid size-8 place-items-center rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 text-emerald-950">
                   <GaugeIcon className="size-4" />
                 </div>
-                <span className="text-sm font-semibold text-white">Диск-Мастер</span>
+                <span className="text-sm font-semibold text-white">{t("Диск-Мастер")}</span>
               </div>
 
               <div className="hidden items-center gap-2 lg:flex">
-                <h1 className="text-sm font-medium text-slate-300">{activeTab?.label}</h1>
+                <h1 className="text-sm font-medium text-slate-300">{t(activeTab?.label ?? "")}</h1>
                 {info ? (
                   <Badge variant={info.admin ? "success" : "neutral"}>
-                    {info.admin ? "администратор" : "без прав администратора"}
+                    {info.admin ? t("администратор") : t("без прав администратора")}
                   </Badge>
                 ) : null}
               </div>
@@ -271,7 +275,7 @@ function App() {
                 <button
                   onClick={() => setAboutOpen(true)}
                   className="hidden items-center rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-[10px] font-medium tabular-nums text-slate-500 transition-colors hover:bg-white/[0.07] hover:text-slate-200 sm:flex"
-                  title="О программе"
+                  title={t("О программе")}
                 >
                   v{updater.version || "…"}
                 </button>
@@ -279,30 +283,32 @@ function App() {
                   onClick={() => void updater.checkNow()}
                   disabled={updater.status === "checking" || updater.status === "downloading"}
                   className="grid size-8 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-slate-300 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-40"
-                  title={updater.status === "portable" ? "Открыть страницу релизов" : "Проверить обновления"}
-                  aria-label="Проверить обновления"
+                  title={updater.status === "portable" ? t("Открыть страницу релизов") : t("Проверить обновления")}
+                  aria-label={t("Проверить обновления")}
                 >
                   <RefreshIcon className={`size-4 ${updater.status === "checking" ? "animate-spin" : ""}`} />
                 </button>
                 {scanJob ? (
                   <span className="hidden text-[11px] text-slate-500 sm:block">
                     {scanJob.finishedAt
-                      ? `Скан завершён · ${formatBytes(scanJob.totalJunkBytes)} мусора`
-                      : `Сканирование ${scanJob.percent}%`}
+                      ? t("Скан завершён · {size} мусора", {
+                          size: formatBytes(scanJob.totalJunkBytes),
+                        })
+                      : t("Сканирование {percent}%", { percent: scanJob.percent })}
                   </span>
                 ) : null}
                 <button
                   onClick={toggleTheme}
                   className="grid size-8 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
-                  title={theme === "dark" ? "Светлая тема" : "Тёмная тема"}
-                  aria-label={theme === "dark" ? "Включить светлую тему" : "Включить тёмную тему"}
+                  title={theme === "dark" ? t("Светлая тема") : t("Тёмная тема")}
+                  aria-label={theme === "dark" ? t("Включить светлую тему") : t("Включить тёмную тему")}
                 >
                   {theme === "dark" ? <SunIcon className="size-4" /> : <MoonIcon className="size-4" />}
                 </button>
                 <button
                   onClick={() => void overviewQuery.refetch()}
                   className="grid size-8 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
-                  title="Обновить данные о дисках"
+                  title={t("Обновить данные о дисках")}
                 >
                   <RefreshIcon className="size-4" />
                 </button>
@@ -324,7 +330,7 @@ function App() {
                     }`}
                   >
                     <Icon className="size-3.5" />
-                    {item.label}
+                    {t(item.label)}
                   </button>
                 );
               })}

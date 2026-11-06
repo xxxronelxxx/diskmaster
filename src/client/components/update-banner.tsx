@@ -1,6 +1,7 @@
 import type { Updater } from "@/client/lib/updater";
 import { Button } from "./ui";
 import { SparkleIcon } from "./icons";
+import { t } from "@/client/i18n";
 
 /**
  * Shows the update that `useUpdater` discovered. The payload signature is
@@ -18,12 +19,12 @@ export function UpdateBanner({ updater }: { updater: Updater }) {
 
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-medium text-emerald-100">
-          Доступна версия {update.version}
+          {t("Доступна версия")} {update.version}
         </p>
         <p className="mt-0.5 text-[11px] text-emerald-200/70">
           {status === "downloading"
-            ? `Скачивание обновления… ${progress}%`
-            : update.body?.trim() || "Обновление скачается и установится автоматически."}
+            ? t("Скачивание обновления… {percent}%", { percent: progress })
+            : update.body?.trim() || t("Обновление скачается и установится автоматически.")}
         </p>
         {status === "downloading" ? (
           <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-emerald-950/40">
@@ -41,15 +42,15 @@ export function UpdateBanner({ updater }: { updater: Updater }) {
           size="sm"
           onClick={skipVersion}
           disabled={status === "downloading"}
-          title="Не предлагать эту версию до следующего релиза"
+          title={t("Не предлагать эту версию до следующего релиза")}
         >
-          Пропустить версию
+          {t("Пропустить версию")}
         </Button>
         <Button variant="ghost" size="sm" onClick={dismiss} disabled={status === "downloading"}>
-          Позже
+          {t("Позже")}
         </Button>
         <Button variant="primary" size="sm" onClick={() => void install()} loading={status === "downloading"}>
-          Обновить
+          {t("Обновить")}
         </Button>
       </div>
     </div>

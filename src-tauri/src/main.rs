@@ -8,6 +8,7 @@ mod folders;
 mod guard;
 mod hash_cache;
 mod history;
+mod locale;
 mod logging;
 mod maintenance;
 mod metrics;
@@ -307,11 +308,19 @@ fn start_disk_watch(app: AppHandle) {
                 }
                 low = true;
                 if let Some(tray) = app.tray_by_id("main-tray") {
-                    let _ = tray.set_tooltip(Some(format!(
-                        "Мало места на {}: свободно {}",
-                        drive.letter,
-                        format_gb(drive.free)
-                    )));
+                    let _ = tray.set_tooltip(Some(if locale::is_en() {
+                        format!(
+                            "Low space on {}: {} free",
+                            drive.letter,
+                            format_gb(drive.free)
+                        )
+                    } else {
+                        format!(
+                            "Мало места на {}: свободно {}",
+                            drive.letter,
+                            format_gb(drive.free)
+                        )
+                    }));
                 }
                 let cooldown = (settings.low_disk_cooldown_min.max(5) as i64) * 60;
                 let previous = last.get(&drive.letter).copied().unwrap_or(0);
@@ -319,22 +328,36 @@ fn start_disk_watch(app: AppHandle) {
                     continue;
                 }
                 last.insert(drive.letter.clone(), now);
-                notify(
-                    &app,
-                    "Мало свободного места",
-                    &format!(
+                let body = if locale::is_en() {
+                    format!(
+                        "{}: {} free of {} ({}%). Open Cleanup to free up space.",
+                        drive.letter,
+                        format_gb(drive.free),
+                        format_gb(drive.total),
+                        free_percent.round() as u32
+                    )
+                } else {
+                    format!(
                         "{}: свободно {} из {} ({}%). Откройте «Очистку», чтобы освободить место.",
                         drive.letter,
                         format_gb(drive.free),
                         format_gb(drive.total),
                         free_percent.round() as u32
-                    ),
+                    )
+                };
+                notify(
+                    &app,
+                    locale::tr("Мало свободного места", "Low disk space"),
+                    &body,
                     "cleanup",
                 );
             }
             if !low {
                 if let Some(tray) = app.tray_by_id("main-tray") {
-                    let _ = tray.set_tooltip(Some("Диск-Мастер — очистка и мониторинг"));
+                    let _ = tray.set_tooltip(Some(locale::tr(
+                        "Диск-Мастер — очистка и мониторинг",
+                        "Disk Master — cleanup and monitoring",
+                    )));
                 }
             }
         }
@@ -410,30 +433,57 @@ fn save_window_state(window: &tauri::Window, force: bool) {
 
 fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let portable = paths::is_portable();
-    let open = MenuItem::with_id(app, "open", "Открыть Диск-Мастер", true, None::<&str>)?;
-    let widget = MenuItem::with_id(app, "widget", "Показать/скрыть виджет", true, None::<&str>)?;
-    let quick = MenuItem::with_id(app, "quick-clean", "Быстрая очистка", true, None::<&str>)?;
-    let snapshot = MenuItem::with_id(
+    let open = MenuItem::with_id(
         app,
-        "snapshot",
-        "Сделать снимок свободного места",
+        "open",
+        locale::tr("Открыть Диск-Мастер", "Open Disk Master"),
         true,
         None::<&str>,
     )?;
-    let settings = MenuItem::with_id(app, "settings", "Настройки", true, None::<&str>)?;
+    let widget = MenuItem::with_id(
+        app,
+        "widget",
+        locale::tr("Показать/скрыть виджет", "Show/hide widget"),
+        true,
+        None::<&str>,
+    )?;
+    let quick = MenuItem::with_id(
+        app,
+        "quick-clean",
+        locale::tr("Быстрая очистка", "Quick cleanup"),
+        true,
+        None::<&str>,
+    )?;
+    let snapshot = MenuItem::with_id(
+        app,
+        "snapshot",
+        locale::tr("Сделать снимок свободного места", "Capture free space"),
+        true,
+        None::<&str>,
+    )?;
+    let settings = MenuItem::with_id(
+        app,
+        "settings",
+        locale::tr("Настройки", "Settings"),
+        true,
+        None::<&str>,
+    )?;
     let autostart = CheckMenuItem::with_id(
         app,
         "autostart",
         if portable {
-            "Автозапуск недоступен в портативной версии"
+            locale::tr(
+                "Автозапуск недоступен в портативной версии",
+                "Autostart is unavailable in the portable build",
+            )
         } else {
-            "Запускать при входе в Windows"
+            locale::tr("Запускать при входе в Windows", "Start with Windows")
         },
         !portable,
         !portable && autostart_enabled(),
         None::<&str>,
     )?;
-    let quit = MenuItem::with_id(app, "quit", "Выход", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", locale::tr("Выход", "Quit"), true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let separator2 = PredefinedMenuItem::separator(app)?;
 
@@ -459,7 +509,10 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 
     TrayIconBuilder::with_id("main-tray")
         .icon(icon)
-        .tooltip("Диск-Мастер — очистка и мониторинг")
+        .tooltip(locale::tr(
+            "Диск-Мастер — очистка и мониторинг",
+            "Disk Master — cleanup and monitoring",
+        ))
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_tray_icon_event(|tray, event| {
@@ -498,14 +551,23 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                         &result.errors,
                     );
                     if settings::current().quick_clean_notify {
-                        notify(
-                            &app,
-                            "Быстрая очистка завершена",
-                            &format!(
+                        let body = if locale::is_en() {
+                            format!(
+                                "Freed {} · {} files",
+                                format_gb(result.freed_bytes),
+                                result.deleted_files
+                            )
+                        } else {
+                            format!(
                                 "Освобождено {} · {} файлов",
                                 format_gb(result.freed_bytes),
                                 result.deleted_files
-                            ),
+                            )
+                        };
+                        notify(
+                            &app,
+                            locale::tr("Быстрая очистка завершена", "Quick cleanup finished"),
+                            &body,
                             "cleanup",
                         );
                     }
@@ -569,6 +631,23 @@ fn run_headless_clean() {
 /* -------------------------------------------------------------------------- */
 /*                                   main                                     */
 /* -------------------------------------------------------------------------- */
+
+#[tauri::command]
+fn set_locale(locale_name: String, app: AppHandle) {
+    locale::set(&locale_name);
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_title(locale::tr("Диск-Мастер", "Disk Master"));
+    }
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        let _ = tray.set_tooltip(Some(locale::tr(
+            "Диск-Мастер — очистка и мониторинг",
+            "Disk Master — cleanup and monitoring",
+        )));
+        if let Ok(menu) = build_menu(&app) {
+            let _ = tray.set_menu(Some(menu));
+        }
+    }
+}
 
 fn main() {
     if !paths::is_portable() {
@@ -670,6 +749,7 @@ fn main() {
             commands::sensors_stop,
             commands::sensors_install,
             commands::initial_tab,
+            set_locale,
             commands::maintenance_status,
             commands::system_operation,
             commands::delete_large_files,

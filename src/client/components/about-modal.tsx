@@ -5,7 +5,7 @@ import type { SensorsState, SettingsState, SystemInfo } from "@/shared/types";
 import type { Updater } from "@/client/lib/updater";
 import { queryClient } from "@/client/rpc-client";
 import { Button, Modal } from "./ui";
-import { t } from "@/client/i18n";
+import { t, translateError } from "@/client/i18n";
 
 const REPO = "https://github.com/xxxronelxxx/diskmaster";
 
@@ -46,17 +46,17 @@ export function AboutModal({
   const sensorsValue = !sensors
     ? "…"
     : sensors.running
-      ? `${sensors.pawnioInstalled ? `PawnIO ${sensors.pawnioVersion ?? ""}`.trim() : "без драйвера"} · ${sensors.sensors.length} датч.`
+      ? `${sensors.pawnioInstalled ? `PawnIO ${sensors.pawnioVersion ?? ""}`.trim() : t("без драйвера")} · ${t("{count} датч.", { count: sensors.sensors.length })}`
       : sensors.error
-        ? `выключены: ${sensors.error}`
-        : "выключены";
+        ? t("выключены: {error}", { error: translateError(sensors.error) })
+        : t("выключены");
   const startupValue = !settings
     ? "…"
     : !settings.autostart
-      ? "выключен"
+      ? t("выключен")
       : settings.settings.alwaysAdmin
-        ? "задача Планировщика (админ)"
-        : "при входе в Windows";
+        ? t("задача Планировщика (админ)")
+        : t("при входе в Windows");
 
   async function copyDiagnostics() {
     try {
@@ -72,20 +72,20 @@ export function AboutModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={t("about")}
-      description="Диск-Мастер — очистка диска, анализ места и мониторинг Windows."
-      footer={<Button variant="secondary" onClick={onClose}>{t("close")}</Button>}
+      title={t("О программе")}
+      description={t("Диск-Мастер — очистка диска, анализ места и мониторинг Windows.")}
+      footer={<Button variant="secondary" onClick={onClose}>{t("Закрыть")}</Button>}
     >
       <div className="space-y-0.5">
-        <Row label="Версия" value={`v${updater.version || "…"}`} />
-        <Row label="Режим" value={updater.portable ? "портативная" : "установленная"} />
-        <Row label="Издатель" value="Development SPB" />
-        {info ? <Row label="Система" value={`${info.os} ${info.version} (${info.build})`} /> : null}
-        {info ? <Row label="Права" value={info.admin ? "администратор" : "обычные"} /> : null}
-        <Row label="Датчики" value={sensorsValue} />
-        <Row label="Автозапуск" value={startupValue} />
+        <Row label={t("Версия")} value={`v${updater.version || "…"}`} />
+        <Row label={t("Режим")} value={updater.portable ? t("портативная") : t("установленная")} />
+        <Row label={t("Издатель")} value="Development SPB" />
+        {info ? <Row label={t("Система")} value={`${info.os} ${info.version} (${info.build})`} /> : null}
+        {info ? <Row label={t("Права")} value={info.admin ? t("администратор") : t("обычные")} /> : null}
+        <Row label={t("Датчики")} value={sensorsValue} />
+        <Row label={t("Автозапуск")} value={startupValue} />
         <Row
-          label="Горячие клавиши"
+          label={t("Горячие клавиши")}
           value={
             settings
               ? `${settings.settings.hotkeyShow || "—"} / ${settings.settings.hotkeyWidget || "—"}`
@@ -93,8 +93,8 @@ export function AboutModal({
           }
           mono
         />
-        <Row label="Данные" value="%LOCALAPPDATA%\DiskMasterData" mono />
-        <Row label="Журнал" value="…\DiskMasterData\logs\app.log" mono />
+        <Row label={t("Данные")} value="%LOCALAPPDATA%\DiskMasterData" mono />
+        <Row label={t("Журнал")} value="…\DiskMasterData\logs\app.log" mono />
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
@@ -102,16 +102,16 @@ export function AboutModal({
           GitHub
         </Button>
         <Button size="sm" variant="secondary" onClick={() => void invoke("open_releases").catch(() => undefined)}>
-          Релизы
+          {t("Релизы")}
         </Button>
         <Button size="sm" variant="secondary" onClick={() => void invoke("open_logs").catch(() => undefined)}>
-          Открыть журнал
+          {t("Открыть журнал")}
         </Button>
         <Button size="sm" variant="secondary" onClick={() => void copyDiagnostics()}>
-          {copied ? "Скопировано" : t("copyDiagnostics")}
+          {copied ? t("Скопировано") : t("Скопировать диагностику")}
         </Button>
         <Button size="sm" variant="primary" onClick={() => void updater.checkNow()}>
-          {t("checkUpdates")}
+          {t("Проверить обновления")}
         </Button>
       </div>
 
@@ -119,7 +119,7 @@ export function AboutModal({
         <p className="mt-3 text-[11px] text-slate-400">{updater.notice}</p>
       ) : updater.update ? (
         <p className="mt-3 text-[11px] text-emerald-300">
-          Доступна версия {updater.update.version}
+          {t("Доступна версия")} {updater.update.version}
         </p>
       ) : null}
     </Modal>

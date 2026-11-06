@@ -13,6 +13,7 @@ type ResizeDirection =
   | "West";
 import type { DriveInfo, MetricsSample, ProcessInfo, WidgetSettings } from "@/shared/types";
 import { formatBytes } from "@/client/lib/format";
+import { t } from "@/client/i18n";
 
 type WidgetData = {
   settings: WidgetSettings;
@@ -141,7 +142,7 @@ export function WidgetView() {
               style={{ background: settings.accent }}
             />
             <span className="text-[0.7em] font-semibold tracking-[0.16em] text-white/60">
-              {settings.title}
+              {t(settings.title)}
             </span>
           </div>
         ) : null}
@@ -159,7 +160,7 @@ export function WidgetView() {
             ) : null}
             {settings.showRam ? (
               <MetricRow
-                label="ОЗУ"
+                label={t("ОЗУ")}
                 value={formatBytes(latest.ramUsed, 1)}
                 percentValue={ramPercent}
                 accent={settings.accent}
@@ -168,8 +169,8 @@ export function WidgetView() {
             ) : null}
             {settings.showDisk ? (
               <MetricRow
-                label="Диск"
-                value={`${formatBytes(diskRate, 0)}/с`}
+                label={t("Диск")}
+                value={`${formatBytes(diskRate, 0)}${t("/с")}`}
                 percentValue={Math.min(100, (diskRate / (50 * 1024 * 1024)) * 100)}
                 accent={settings.accent}
                 bars={settings.bars}
@@ -177,8 +178,8 @@ export function WidgetView() {
             ) : null}
             {settings.showNet ? (
               <MetricRow
-                label="Сеть"
-                value={`${formatBytes(netRate, 0)}/с`}
+                label={t("Сеть")}
+                value={`${formatBytes(netRate, 0)}${t("/с")}`}
                 percentValue={Math.min(100, (netRate / (10 * 1024 * 1024)) * 100)}
                 accent={settings.accent}
                 bars={settings.bars}
@@ -186,7 +187,7 @@ export function WidgetView() {
             ) : null}
             {settings.showDrives ? (
               <MetricRow
-                label="Свободно"
+                label={t("Свободно")}
                 value={formatBytes(totalFree, 0)}
                 percentValue={totalSpace > 0 ? (totalFree / totalSpace) * 100 : 0}
                 accent={settings.accent}
@@ -195,7 +196,7 @@ export function WidgetView() {
             ) : null}
             {settings.showTemperatures && (cpuTemp !== null || diskTemp !== null) ? (
               <div className="mt-1 flex items-center justify-between text-[0.7em] text-white/50">
-                <span>Температура</span>
+                <span>{t("Температура")}</span>
                 <span className="tabular-nums">
                   {cpuTemp !== null ? `CPU ${cpuTemp.toFixed(0)}°` : ""}
                   {cpuTemp !== null && diskTemp !== null ? " · " : ""}
@@ -210,7 +211,7 @@ export function WidgetView() {
             ) : null}
           </div>
         ) : (
-          <div className="py-2 text-[0.75em] text-white/40">Собираем данные…</div>
+          <div className="py-2 text-[0.75em] text-white/40">{t("Собираем данные…")}</div>
         )}
       </div>
 
@@ -233,13 +234,13 @@ export function WidgetView() {
           }}
         >
           <button className="block w-full px-3 py-1.5 text-left text-slate-200 hover:bg-white/10" onClick={() => void action("widget_hide")}>
-            Скрыть виджет
+            {t("Скрыть виджет")}
           </button>
           <button className="block w-full px-3 py-1.5 text-left text-slate-200 hover:bg-white/10" onClick={() => void action("show_main")}>
-            Открыть Диск-Мастер
+            {t("Открыть Диск-Мастер")}
           </button>
           <button className="block w-full px-3 py-1.5 text-left text-rose-300 hover:bg-rose-500/15" onClick={() => void action("widget_stop")}>
-            Закрыть виджет
+            {t("Закрыть виджет")}
           </button>
         </div>
       ) : null}

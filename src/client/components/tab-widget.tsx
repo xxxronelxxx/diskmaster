@@ -4,6 +4,7 @@ import type { WidgetSettings } from "@/shared/types";
 import { queryClient } from "@/client/rpc-client";
 import { Badge, Button, Card, SectionTitle } from "./ui";
 import { AlertIcon, CheckIcon, RefreshIcon, SpinnerIcon, SparkleIcon } from "./icons";
+import { t } from "@/client/i18n";
 
 const ACCENTS = ["#38e0a0", "#38bdf8", "#a78bfa", "#fbbf24", "#fb7185", "#f472b6"];
 const PRESETS = [
@@ -173,15 +174,15 @@ export function WidgetTab() {
   return (
     <div className="space-y-5">
       <SectionTitle
-        title="Виджет на рабочем столе"
-        subtitle="Отдельное окно поверх обоев: двигайте мышью, меняйте размер за угол, всё настраивается"
+        title={t("Виджет на рабочем столе")}
+        subtitle={t("Отдельное окно поверх обоев: двигайте мышью, меняйте размер за угол, всё настраивается")}
         action={
           <div className="flex items-center gap-2">
-            {running ? <Badge variant="success">запущен</Badge> : <Badge variant="neutral">остановлен</Badge>}
+            {running ? <Badge variant="success">{t("запущен")}</Badge> : <Badge variant="neutral">{t("остановлен")}</Badge>}
             {running ? (
-              <Button variant="secondary" onClick={resetPosition} loading={busy} title="Вернуть виджет в правый верхний угол">
+              <Button variant="secondary" onClick={resetPosition} loading={busy} title={t("Вернуть виджет в правый верхний угол")}>
                 <RefreshIcon className="size-4" />
-                На экран
+                {t("На экран")}
               </Button>
             ) : null}
             <Button
@@ -190,7 +191,7 @@ export function WidgetTab() {
               loading={busy}
             >
               <SparkleIcon className="size-4" />
-              {running ? "Остановить" : "Запустить виджет"}
+              {running ? t("Остановить") : t("Запустить виджет")}
             </Button>
           </div>
         }
@@ -201,17 +202,15 @@ export function WidgetTab() {
           <div className="flex items-start gap-2.5">
             <CheckIcon className="mt-0.5 size-4 shrink-0 text-emerald-300" />
             <div className="min-w-0 text-[11px] leading-relaxed text-emerald-100/90">
-              <p className="text-xs font-medium text-emerald-100">Виджет показан на рабочем столе</p>
+              <p className="text-xs font-medium text-emerald-100">{t("Виджет показан на рабочем столе")}</p>
               <p className="mt-1 text-emerald-200/70">
-                Ищите панель в правом верхнем углу экрана — рядом с часами. Перетаскивайте её
-                левой кнопкой мыши за любое место, размер меняйте за угол в правом нижнем углу.
+                {t("Ищите панель в правом верхнем углу экрана — рядом с часами. Перетаскивайте её левой кнопкой мыши за любое место, размер меняйте за угол в правом нижнем углу.")}
                 {settings?.zMode === "desktop"
-                  ? " Сейчас выбран режим «Под окнами»: виджет лежит над обоями и скрывается за развёрнутыми окнами — сверните их, чтобы увидеть."
+                  ? t(" Сейчас выбран режим «Под окнами»: виджет лежит над обоями и скрывается за развёрнутыми окнами — сверните их, чтобы увидеть.")
                   : ""}
               </p>
               <p className="mt-1 text-emerald-200/60">
-                Не видно? Нажмите «На экран» — виджет вернётся в угол. Правый клик по виджету
-                открывает меню: скрыть, свернуть в трей, закрыть.
+                {t("Не видно? Нажмите «На экран» — виджет вернётся в угол. Правый клик по виджету открывает меню: скрыть, свернуть в трей, закрыть.")}
               </p>
             </div>
           </div>
@@ -228,22 +227,22 @@ export function WidgetTab() {
 
       {!settings ? (
         <div className="flex items-center gap-2 text-xs text-slate-400">
-          <SpinnerIcon className="size-3.5" /> Читаем настройки…
+          <SpinnerIcon className="size-3.5" /> {t("Читаем настройки…")}
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[1.25fr_1fr]">
           <div className="space-y-4">
             <Card className="p-4">
               <div className="mb-1 flex items-center gap-2">
-                <h3 className="text-sm font-medium text-white">Внешний вид</h3>
+                <h3 className="text-sm font-medium text-white">{t("Внешний вид")}</h3>
                 {savedFlag ? (
                   <span className="ml-auto flex items-center gap-1 text-[10px] text-emerald-300/80">
-                    <CheckIcon className="size-3" /> сохранено
+                    <CheckIcon className="size-3" /> {t("сохранено")}
                   </span>
                 ) : null}
               </div>
 
-              <Row label="Прозрачность" hint="Насколько виджет пропускает обои и окна">
+              <Row label={t("Прозрачность")} hint={t("Насколько виджет пропускает обои и окна")}>
                 <Slider
                   value={Math.round(settings.opacity * 100)}
                   min={20}
@@ -253,14 +252,14 @@ export function WidgetTab() {
                 />
               </Row>
 
-              <Row label="Прозрачность кликов" hint="Клики проходят сквозь виджет — как у настоящего виджета">
+              <Row label={t("Прозрачность кликов")} hint={t("Клики проходят сквозь виджет — как у настоящего виджета")}>
                 <Toggle
                   checked={settings.clickThrough}
                   onChange={(value) => patch({ clickThrough: value })}
                 />
               </Row>
 
-              <Row label="Масштаб текста" hint="Размер подписей и цифр">
+              <Row label={t("Масштаб текста")} hint={t("Размер подписей и цифр")}>
                 <Slider
                   value={Number((settings.fontScale * 100).toFixed(0))}
                   min={70}
@@ -271,7 +270,7 @@ export function WidgetTab() {
                 />
               </Row>
 
-              <Row label="Скругление углов">
+              <Row label={t("Скругление углов")}>
                 <Slider
                   value={settings.radius}
                   min={0}
@@ -281,7 +280,7 @@ export function WidgetTab() {
                 />
               </Row>
 
-              <Row label="Акцентный цвет">
+              <Row label={t("Акцентный цвет")}>
                 <div className="flex gap-1.5">
                   {ACCENTS.map((color) => (
                     <button
@@ -297,7 +296,7 @@ export function WidgetTab() {
                 </div>
               </Row>
 
-              <Row label="Размер" hint={`${settings.width} × ${settings.height} px — можно менять и мышью`}>
+              <Row label={t("Размер")} hint={`${settings.width} × ${settings.height} px — можно менять и мышью`}>
                 <Slider
                   value={settings.width}
                   min={220}
@@ -308,13 +307,13 @@ export function WidgetTab() {
                 />
               </Row>
 
-              <Row label="Поведение окон" hint="Выберите, как виджет ведёт себя относительно других окон">
+              <Row label={t("Поведение окон")} hint={t("Выберите, как виджет ведёт себя относительно других окон")}>
                 <div className="flex overflow-hidden rounded-lg border border-white/10">
                   {(
                     [
-                      ["desktop", "Под окнами"],
-                      ["normal", "Обычный"],
-                      ["top", "Поверх всех"],
+                      ["desktop", t("Под окнами")],
+                      ["normal", t("Обычный")],
+                      ["top", t("Поверх всех")],
                     ] as [WidgetSettings["zMode"], string][]
                   ).map(([mode, label]) => (
                     <button
@@ -332,23 +331,23 @@ export function WidgetTab() {
                 </div>
               </Row>
 
-              <Row label="Полосы индикаторов" hint="Горизонтальная шкала загрузки рядом с каждой метрикой">
+              <Row label={t("Полосы индикаторов")} hint={t("Горизонтальная шкала загрузки рядом с каждой метрикой")}>
                 <Toggle checked={settings.bars} onChange={(value) => patch({ bars: value })} />
               </Row>
             </Card>
 
             <Card className="p-4">
-              <h3 className="mb-1 text-sm font-medium text-white">Метрики</h3>
+              <h3 className="mb-1 text-sm font-medium text-white">{t("Метрики")}</h3>
               {(
                 [
-                  ["showCpu", "Процессор"],
-                  ["showRam", "Память"],
-                  ["showDisk", "Диск (чтение/запись)"],
-                  ["showNet", "Сеть (входящий/исходящий)"],
-                  ["showDrives", "Свободное место на диске"],
-                  ["showTopProcess", "Самый тяжёлый процесс"],
-                  ["showTemperatures", "Температуры CPU и диска"],
-                  ["showTitle", "Заголовок"],
+                  ["showCpu", t("Процессор")],
+                  ["showRam", t("Память")],
+                  ["showDisk", t("Диск (чтение/запись)")],
+                  ["showNet", t("Сеть (входящий/исходящий)")],
+                  ["showDrives", t("Свободное место на диске")],
+                  ["showTopProcess", t("Самый тяжёлый процесс")],
+                  ["showTemperatures", t("Температуры CPU и диска")],
+                  ["showTitle", t("Заголовок")],
                 ] as [keyof WidgetSettings, string][]
               ).map(([key, label]) => (
                 <Row key={key} label={label}>
@@ -359,14 +358,14 @@ export function WidgetTab() {
                 </Row>
               ))}
 
-              <Row label="Интервал обновления">
+              <Row label={t("Интервал обновления")}>
                 <Slider
                   value={settings.intervalMs}
                   min={500}
                   max={5000}
                   step={100}
                   onChange={(value) => patch({ intervalMs: value })}
-                  suffix=" мс"
+                  suffix={t(" мс")}
                 />
               </Row>
             </Card>
@@ -374,7 +373,7 @@ export function WidgetTab() {
 
           <div className="space-y-4">
             <Card className="p-4">
-              <h3 className="mb-3 text-sm font-medium text-white">Предпросмотр</h3>
+              <h3 className="mb-3 text-sm font-medium text-white">{t("Предпросмотр")}</h3>
               <div className="flex justify-center rounded-xl bg-[radial-gradient(circle_at_30%_20%,var(--preview-from),var(--preview-to)_70%)] p-4">
                 <div
                   className="w-full max-w-[300px] overflow-hidden border p-3 shadow-2xl"
@@ -394,12 +393,12 @@ export function WidgetTab() {
                   ) : null}
                   {[
                     settings.showCpu ? ["CPU", "18%", 22] : null,
-                    settings.showRam ? ["ОЗУ", "14,7 ГБ", 47] : null,
-                    settings.showDisk ? ["ДИСК", "R 0 Б W 2 МБ", 8] : null,
-                    settings.showNet ? ["СЕТЬ", "↓ 24 КБ ↑ 3 КБ", 12] : null,
-                    settings.showDrives ? ["СВОБОДНО", "8,8 ГБ", 96] : null,
-                    settings.showTopProcess ? ["ТОП", "java 3,4 ГБ", 30] : null,
-                    settings.showTemperatures ? ["ТЕМП", "CPU 64° · диск 50°", 64] : null,
+                    settings.showRam ? [t("ОЗУ"), t("14,7 ГБ"), 47] : null,
+                    settings.showDisk ? [t("ДИСК"), t("R 0 Б W 2 МБ"), 8] : null,
+                    settings.showNet ? [t("СЕТЬ"), t("↓ 24 КБ ↑ 3 КБ"), 12] : null,
+                    settings.showDrives ? [t("СВОБОДНО"), t("8,8 ГБ"), 96] : null,
+                    settings.showTopProcess ? [t("ТОП"), t("java 3,4 ГБ"), 30] : null,
+                    settings.showTemperatures ? [t("ТЕМП"), t("CPU 64° · диск 50°"), 64] : null,
                   ]
                     .filter(Boolean)
                     .map((row) => {
@@ -439,12 +438,12 @@ export function WidgetTab() {
                 </div>
               </div>
               <p className="mt-2 text-center text-[10px] leading-relaxed text-slate-500">
-                Предпросмотр приблизительный — точный вид задаёт окно виджета на рабочем столе
+                {t("Предпросмотр приблизительный — точный вид задаёт окно виджета на рабочем столе")}
               </p>
             </Card>
 
             <Card className="p-4">
-              <h3 className="mb-2 text-sm font-medium text-white">Пресеты</h3>
+              <h3 className="mb-2 text-sm font-medium text-white">{t("Пресеты")}</h3>
               <div className="space-y-1.5">
                 {PRESETS.map((preset) => (
                   <button
@@ -470,8 +469,8 @@ export function WidgetTab() {
             </Card>
 
             <Card className="p-4">
-              <h3 className="mb-2 text-sm font-medium text-white">Автозапуск</h3>
-              <Row label="Запускать вместе с Windows" hint="Добавляет запись в HKCU\...\Run">
+              <h3 className="mb-2 text-sm font-medium text-white">{t("Автозапуск")}</h3>
+              <Row label={t("Запускать вместе с Windows")} hint={t("Добавляет запись в HKCU\\...\\Run")}>
                 <Toggle
                   checked={Boolean(status?.autostart)}
                   disabled={autostartMutation.isPending}
@@ -483,11 +482,11 @@ export function WidgetTab() {
               </Row>
               <div className="mt-2 flex gap-2">
                 <Button variant="primary" size="sm" onClick={() => void apply()} loading={busy}>
-                  Применить настройки
+                  {t("Применить настройки")}
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => void infoQuery.refetch()}>
                   <RefreshIcon className="size-3.5" />
-                  Перечитать
+                  {t("Перечитать")}
                 </Button>
               </div>
               {status?.log ? (

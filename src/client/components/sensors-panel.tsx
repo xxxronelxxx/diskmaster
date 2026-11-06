@@ -4,11 +4,12 @@ import type { SensorInfo, SensorReading, SensorsState } from "@/shared/types";
 import { queryClient } from "@/client/rpc-client";
 import { Badge, Button, Card, Modal } from "./ui";
 import { AlertIcon, CheckIcon, CpuIcon, GaugeIcon, ShieldIcon } from "./icons";
+import { t, translateError } from "@/client/i18n";
 
 const HARDWARE_INDEX: Record<string, number> = { Cpu: 0, Gpu: 1, Storage: 2, Motherboard: 3, Memory: 4, Controller: 5 };
 
 function readout(sensor: SensorReading): string {
-  if (sensor.kind === "fan") return `${Math.round(sensor.value)} об/мин`;
+  if (sensor.kind === "fan") return `${Math.round(sensor.value)} ${t("об/мин")}`;
   if (sensor.kind === "percent") return `${Math.round(sensor.value)}%`;
   return `${sensor.value.toFixed(1)} °C`;
 }
@@ -27,11 +28,11 @@ function hardwareLabel(type: string): string {
     case "Gpu":
       return "GPU";
     case "Storage":
-      return "Диск";
+      return t("Диск");
     case "Motherboard":
-      return "Плата";
+      return t("Плата");
     case "Memory":
-      return "Память";
+      return t("Память");
     default:
       return type;
   }
@@ -100,7 +101,7 @@ export function SensorsPanel({ wmiSensors }: { wmiSensors: SensorInfo[] }) {
       await startMutation.mutateAsync(undefined);
       await stateQuery.refetch();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(translateError(cause));
     }
   }
 
@@ -113,12 +114,12 @@ export function SensorsPanel({ wmiSensors }: { wmiSensors: SensorInfo[] }) {
       const result = await installMutation.mutateAsync(undefined);
       setNotice(
         result.needsReboot
-          ? "PawnIO установлен. Может потребоваться перезагрузка Windows."
-          : "Датчики включены.",
+          ? t("PawnIO установлен. Может потребоваться перезагрузка Windows.")
+          : t("Датчики включены."),
       );
       await stateQuery.refetch();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(translateError(cause));
     }
   }
 
@@ -126,22 +127,20 @@ export function SensorsPanel({ wmiSensors }: { wmiSensors: SensorInfo[] }) {
     <Card className="p-4">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <GaugeIcon className="size-4 text-emerald-300" />
-        <p className="text-sm font-medium text-white">Температуры и кулеры</p>
+        <p className="text-sm font-medium text-white">{t("Температуры и кулеры")}</p>
       </div>
 
       {!state ? (
-        <p className="text-xs text-slate-500">Проверяем датчики…</p>
+        <p className="text-xs text-slate-500">{t("Проверяем датчики…")}</p>
       ) : !state.available ? (
         <p className="flex items-center gap-2 rounded-lg border border-amber-400/25 bg-amber-400/[0.08] p-2.5 text-[11px] text-amber-100">
           <AlertIcon className="size-3.5" />
-          Модуль датчиков не найден. Пересоберите приложение (pnpm build:portable).
+          {t("Модуль датчиков не найден. Пересоберите приложение (pnpm build:portable).")}
         </p>
       ) : !state.pawnioInstalled && !state.running ? (
         <div className="space-y-3">
           <p className="text-[11px] leading-relaxed text-slate-400">
-            Чтобы показывать температуру процессора и кулеры, нужен компонент PawnIO —
-            подписанный драйвер из состава приложения. Установка требует прав администратора
-            и выполняется только по кнопке.
+            {t("Чтобы показывать температуру процессора и кулеры, нужен компонент PawnIO — подписанный драйвер из состава приложения. Установка требует прав администратора и выполняется только по кнопке.")}
           </p>
           <Button
             size="sm"
@@ -150,7 +149,7 @@ export function SensorsPanel({ wmiSensors }: { wmiSensors: SensorInfo[] }) {
             loading={installMutation.isPending}
           >
             <ShieldIcon className="size-3.5" />
-            Установить датчики
+            {t("Установить датчики")}
           </Button>
         </div>
       ) : !state.running ? (
@@ -159,27 +158,27 @@ export function SensorsPanel({ wmiSensors }: { wmiSensors: SensorInfo[] }) {
             <div className="space-y-2">
               <p className="text-[11px] text-rose-300">{visibleError}</p>
               <Button size="sm" variant="secondary" onClick={() => void start()} loading={startMutation.isPending}>
-                Повторить
+                {t("Повторить")}
               </Button>
             </div>
           ) : slowStart ? (
             <div className="space-y-2">
-              <p className="text-[11px] text-slate-400">Датчики выключены.</p>
+              <p className="text-[11px] text-slate-400">{t("Датчики выключены.")}</p>
               <Button size="sm" variant="secondary" onClick={() => void start()} loading={startMutation.isPending}>
-                Запустить
+                {t("Запустить")}
               </Button>
             </div>
           ) : (
             <p className="flex items-center gap-2 text-[11px] text-slate-400">
               <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
-              Запускаем датчики…
+              {t("Запускаем датчики…")}
             </p>
           )}
 
           {wmiSensors.length > 0 ? (
             <div className="rounded-lg border border-white/[0.07] bg-white/[0.02] p-2.5">
               <p className="mb-1 text-[10px] uppercase tracking-wide text-slate-500">
-                Датчики LibreHardwareMonitor (WMI)
+                {t("Датчики LibreHardwareMonitor (WMI)")}
               </p>
               <div className="space-y-1">
                 {wmiSensors.slice(0, 8).map((sensor, index) => (
@@ -187,7 +186,7 @@ export function SensorsPanel({ wmiSensors }: { wmiSensors: SensorInfo[] }) {
                     <span className="truncate text-slate-300">{sensor.name}</span>
                     <span className="shrink-0 tabular-nums text-slate-400">
                       {sensor.sensorType === "Fan"
-                        ? `${Math.round(sensor.value)} об/мин`
+                        ? `${Math.round(sensor.value)} ${t("об/мин")}`
                         : `${sensor.value.toFixed(1)} °C`}
                     </span>
                   </div>
@@ -200,7 +199,7 @@ export function SensorsPanel({ wmiSensors }: { wmiSensors: SensorInfo[] }) {
         <div className="space-y-3">
           {groups.length === 0 ? (
             <p className="rounded-lg border border-white/[0.07] bg-white/[0.02] p-2.5 text-[11px] text-slate-400">
-              Датчики запущены, но это оборудование не отдаёт температуры.
+              {t("Датчики запущены, но это оборудование не отдаёт температуры.")}
             </p>
           ) : (
             <div className="space-y-3">
@@ -216,7 +215,7 @@ export function SensorsPanel({ wmiSensors }: { wmiSensors: SensorInfo[] }) {
                   <div className="space-y-1">
                     {group.sensors.map((sensor) => (
                       <div key={sensor.identifier} className="flex items-center justify-between gap-2 text-[11px]">
-                        <span className="truncate text-slate-400">{sensor.name}</span>
+                        <span className="truncate text-slate-400">{t(sensor.name)}</span>
                         <span className="shrink-0 font-medium tabular-nums text-slate-200">
                           {readout(sensor)}
                         </span>
@@ -229,7 +228,7 @@ export function SensorsPanel({ wmiSensors }: { wmiSensors: SensorInfo[] }) {
           )}
 
           {!hasFans ? (
-            <p className="text-[10px] text-slate-500">Вентиляторы не найдены на этом устройстве.</p>
+            <p className="text-[10px] text-slate-500">{t("Вентиляторы не найдены на этом устройстве.")}</p>
           ) : null}
         </div>
       )}
@@ -243,24 +242,22 @@ export function SensorsPanel({ wmiSensors }: { wmiSensors: SensorInfo[] }) {
       <Modal
         open={installOpen}
         onClose={() => setInstallOpen(false)}
-        title="Установить датчики?"
+        title={t("Установить датчики?")}
         description={
           <>
-            Будет установлен подписанный драйвер <b className="text-white">PawnIO 2.2.0</b> из состава
-            приложения. Понадобятся права администратора; возможно, потребуется перезагрузка.
+            {t("Будет установлен подписанный драйвер")} <b className="text-white">PawnIO 2.2.0</b> {t("из состава приложения. Понадобятся права администратора; возможно, потребуется перезагрузка.")}
             <br />
             <br />
-            Драйвер даёт доступ к регистрам процессора и контроллеру ноутбука. Некоторые античиты
-            могут реагировать на такие драйверы.
+            {t("Драйвер даёт доступ к регистрам процессора и контроллеру ноутбука. Некоторые античиты могут реагировать на такие драйверы.")}
           </>
         }
         footer={
           <>
             <Button variant="ghost" onClick={() => setInstallOpen(false)}>
-              Отмена
+              {t("Отмена")}
             </Button>
             <Button variant="primary" onClick={() => void install()} loading={installMutation.isPending}>
-              Установить
+              {t("Установить")}
             </Button>
           </>
         }

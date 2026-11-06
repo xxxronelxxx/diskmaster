@@ -12,6 +12,7 @@ import {
   SpinnerIcon,
   TrashIcon,
 } from "./icons";
+import { t, translateError } from "@/client/i18n";
 
 function CategoryRow({
   category,
@@ -47,18 +48,18 @@ function CategoryRow({
       />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-sm font-medium text-slate-100">{category.name}</span>
+          <span className="text-sm font-medium text-slate-100">{t(category.name)}</span>
           {category.risk === "caution" ? (
             <Badge variant="warn">
-              <AlertIcon className="size-3" /> осторожно
+              <AlertIcon className="size-3" /> {t("осторожно")}
             </Badge>
           ) : null}
           {category.needsAdmin && !admin ? (
             <Badge variant="neutral">
-              <ShieldIcon className="size-3" /> нужен админ
+              <ShieldIcon className="size-3" /> {t("нужен админ")}
             </Badge>
           ) : null}
-          {category.status === "partial" ? <Badge variant="info">частично</Badge> : null}
+          {category.status === "partial" ? <Badge variant="info">{t("частично")}</Badge> : null}
           {error ? <Badge variant="danger">{category.error}</Badge> : null}
         </div>
         <p className="mt-0.5 text-xs leading-relaxed text-slate-400">{category.description}</p>
@@ -72,14 +73,14 @@ function CategoryRow({
         {pending || scanning ? (
           <span className="inline-flex items-center gap-1 text-[11px] text-slate-500">
             <SpinnerIcon className="size-3" />
-            {scanning ? "счёт…" : "ожидание"}
+            {scanning ? t("счёт…") : t("ожидание")}
           </span>
         ) : (
           <>
             <p className="text-sm font-semibold tabular-nums text-white">
               {formatBytes(category.bytes)}
             </p>
-            <p className="text-[11px] text-slate-500">{formatCount(category.files)} файлов</p>
+            <p className="text-[11px] text-slate-500">{formatCount(category.files)} {t("файлов")}</p>
           </>
         )}
       </div>
@@ -199,18 +200,18 @@ export function CleanupTab({
   return (
     <div className="space-y-5">
       <SectionTitle
-        title="Очистка диска"
-        subtitle="Временные файлы, кэши, корзина и журналы — то, что можно удалить без потери данных"
+        title={t("Очистка диска")}
+        subtitle={t("Временные файлы, кэши, корзина и журналы — то, что можно удалить без потери данных")}
         action={
           job ? (
             <Button variant="secondary" onClick={onStart} loading={starting || scanning}>
               <SparkleIcon className="size-4" />
-              {scanning ? "Сканирование…" : "Проверить снова"}
+              {scanning ? t("Сканирование…") : t("Проверить снова")}
             </Button>
           ) : (
             <Button variant="primary" onClick={onStart} loading={starting}>
               <SparkleIcon className="size-4" />
-              Начать проверку
+              {t("Начать проверку")}
             </Button>
           )
         }
@@ -219,11 +220,11 @@ export function CleanupTab({
       {!job ? (
         <EmptyState
           icon={<SparkleIcon className="size-6" />}
-          title="Проверим, что можно удалить"
-          description="Сканируем 12 категорий: временные файлы, кэш браузеров, кэш обновлений Windows, дампы, эскизы, журналы и корзину. Обычно занимает меньше минуты."
+          title={t("Проверим, что можно удалить")}
+          description={t("Сканируем 12 категорий: временные файлы, кэш браузеров, кэш обновлений Windows, дампы, эскизы, журналы и корзину. Обычно занимает меньше минуты.")}
           action={
             <Button variant="primary" onClick={onStart} loading={starting}>
-              Начать проверку
+              {t("Начать проверку")}
             </Button>
           }
         />
@@ -234,23 +235,23 @@ export function CleanupTab({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-sm text-slate-100">
               <SpinnerIcon className="size-4 text-sky-300" />
-              {job.phase === "large-files" ? "Ищем большие файлы…" : "Сканируем диск…"}
+              {job.phase === "large-files" ? t("Ищем большие файлы…") : t("Сканируем диск…")}
               <span className="font-semibold tabular-nums text-white">{job.percent}%</span>
             </div>
             <span className="text-xs text-slate-400">
-              {formatCount(job.filesScanned)} файлов · {formatBytes(job.bytesScanned)}
+              {formatCount(job.filesScanned)} {t("файлов ·")} {formatBytes(job.bytesScanned)}
             </span>
           </div>
           <Progress className="mt-3" value={job.percent} tone="sky" />
           <p className="mt-2 truncate font-mono text-[11px] text-slate-500" title={job.scanPath}>
-            {job.scanPath || "Подготовка…"}
+            {job.scanPath || t("Подготовка…")}
           </p>
         </Card>
       ) : null}
 
       {job?.phase === "error" ? (
         <Card className="border-rose-400/30 bg-rose-500/[0.07] p-4 text-sm text-rose-200">
-          Сканирование прервано: {job.error}
+          {t("Сканирование прервано:")} {job.error}
         </Card>
       ) : null}
 
@@ -262,24 +263,24 @@ export function CleanupTab({
             </div>
             <div className="min-w-0">
               <p className="text-sm font-medium text-emerald-100">
-                Освобождено {formatBytes(result.freedBytes)} · удалено {formatCount(result.deletedFiles)} объектов
+                {t("Освобождено")} {formatBytes(result.freedBytes)} {t("· удалено")} {formatCount(result.deletedFiles)} {t("объектов")}
               </p>
               {result.errors.length > 0 ? (
                 <ul className="mt-1.5 space-y-0.5 text-[11px] text-amber-200/80">
                   {result.errors.slice(0, 5).map((error) => (
-                    <li key={error}>· {error}</li>
+                    <li key={error}>· {translateError(error)}</li>
                   ))}
-                  {result.errors.length > 5 ? <li>· и ещё {result.errors.length - 5}…</li> : null}
+                  {result.errors.length > 5 ? <li>{t("· и ещё")} {result.errors.length - 5}…</li> : null}
                 </ul>
               ) : (
-                <p className="mt-1 text-xs text-emerald-200/70">Всё выбранное удалено без ошибок.</p>
+                <p className="mt-1 text-xs text-emerald-200/70">{t("Всё выбранное удалено без ошибок.")}</p>
               )}
             </div>
             <button
               className="ml-auto text-xs text-emerald-200/60 hover:text-emerald-100"
               onClick={() => setCleanResult(null)}
             >
-              скрыть
+              {t("скрыть")}
             </button>
           </div>
         </Card>
@@ -288,10 +289,10 @@ export function CleanupTab({
       {finished && job ? (
         <div className="flex flex-wrap items-end justify-between gap-3 rounded-2xl border border-white/10 bg-gradient-to-br from-sky-500/[0.10] via-white/[0.03] to-transparent p-4">
           <div>
-            <p className="text-[11px] uppercase tracking-wide text-sky-300/70">Можно освободить</p>
+            <p className="text-[11px] uppercase tracking-wide text-sky-300/70">{t("Можно освободить")}</p>
             <p className="text-2xl font-semibold tracking-tight text-white">{formatBytes(totalBytes)}</p>
             <p className="text-xs text-slate-400">
-              {formatCount(totalFiles)} файлов · проверено {formatCount(job.filesScanned)} файлов на диске
+              {formatCount(totalFiles)} {t("файлов · проверено")} {formatCount(job.filesScanned)} {t("файлов на диске")}
             </p>
           </div>
           <div className="flex gap-2">
@@ -301,7 +302,7 @@ export function CleanupTab({
               onClick={() => setSelected(new Set(safeSelectable.map((category) => category.id)))}
               disabled={safeSelectable.length === 0}
             >
-              Выбрать всё безопасное
+              {t("Выбрать всё безопасное")}
             </Button>
             <Button
               variant="secondary"
@@ -310,7 +311,7 @@ export function CleanupTab({
               loading={dryRunMutation.isPending}
               disabled={selectedBytes === 0 || dryRunMutation.isPending}
             >
-              Пробный запуск
+              {t("Пробный запуск")}
             </Button>
             <Button
               variant="primary"
@@ -318,7 +319,7 @@ export function CleanupTab({
               disabled={selectedBytes === 0 || cleanMutation.isPending}
             >
               <TrashIcon className="size-4" />
-              Очистить {selectedBytes > 0 ? formatBytes(selectedBytes) : ""}
+              {t("Очистить")} {selectedBytes > 0 ? formatBytes(selectedBytes) : ""}
             </Button>
           </div>
         </div>
@@ -328,20 +329,20 @@ export function CleanupTab({
         <Card className="border-sky-400/25 bg-sky-500/[0.06] p-3.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-sky-100">
-              Пробный запуск: будет удалено <b>{formatBytes(dryRun.data.freedBytes)}</b> ·{" "}
-              {formatCount(dryRun.data.deletedFiles)} файлов. Ничего не удалено.
+              {t("Пробный запуск: будет удалено")} <b>{formatBytes(dryRun.data.freedBytes)}</b> ·{" "}
+              {formatCount(dryRun.data.deletedFiles)} {t("файлов. Ничего не удалено.")}
             </p>
             <button
               className="text-[11px] text-slate-400 hover:text-white"
               onClick={() => setDryRun(null)}
             >
-              скрыть
+              {t("скрыть")}
             </button>
           </div>
           <div className="mt-2 grid gap-1 sm:grid-cols-2">
             {dryRun.data.categories.map((category) => (
               <div key={category.id} className="flex justify-between gap-2 text-[11px]">
-                <span className="truncate text-slate-400">{category.name}</span>
+                <span className="truncate text-slate-400">{t(category.name)}</span>
                 <span className="shrink-0 tabular-nums text-slate-300">{formatBytes(category.bytes)}</span>
               </div>
             ))}
@@ -353,7 +354,7 @@ export function CleanupTab({
         <div className="space-y-2">
           <div className="flex items-center justify-between px-1">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Категории
+              {t("Категории")}
             </p>
             {finished && safeSelectable.length > 0 ? (
               <button
@@ -364,7 +365,7 @@ export function CleanupTab({
                   )
                 }
               >
-                {allSelected ? "снять выделение" : "выбрать все"}
+                {allSelected ? t("снять выделение") : t("выбрать все")}
               </button>
             ) : null}
           </div>
@@ -386,7 +387,7 @@ export function CleanupTab({
                 />
                 {isCleaned ? (
                   <span className="absolute right-28 top-3 text-[10px] text-emerald-300/80">
-                    очищено · {formatBytes(cleaned[category.id])}
+                    {t("очищено ·")} {formatBytes(cleaned[category.id])}
                   </span>
                 ) : null}
               </div>
@@ -397,28 +398,27 @@ export function CleanupTab({
 
       {job && job.largeFiles.length > 0 ? (
         <p className="px-1 text-[11px] text-slate-500">
-          Дополнительно найдено {job.largeFiles.length} больших файлов — смотрите раздел
-          «Большие файлы».
+          {t("Дополнительно найдено")} {job.largeFiles.length} {t("больших файлов — смотрите раздел «Большие файлы».")}
         </p>
       ) : null}
 
       <Modal
         open={confirming}
         onClose={() => setConfirming(false)}
-        title="Удалить выбранный мусор?"
+        title={t("Удалить выбранный мусор?")}
         description={
           <>
-            Будет удалено <b className="text-white">{formatBytes(selectedBytes)}</b> в{" "}
-            {selectedCategories.length} категориях. Файлы удаляются безвозвратно
+            {t("Будет удалено")} <b className="text-white">{formatBytes(selectedBytes)}</b> {t("в")}{" "}
+            {selectedCategories.length} {t("категориях. Файлы удаляются безвозвратно")}
             {selectedCategories.some((category) => category.id === "recycle-bin")
-              ? ", корзина очищается полностью."
+              ? t(", корзина очищается полностью.")
               : "."}
           </>
         }
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirming(false)}>
-              Отмена
+              {t("Отмена")}
             </Button>
             <Button
               variant="danger"
@@ -426,7 +426,7 @@ export function CleanupTab({
               loading={cleanMutation.isPending}
             >
               <TrashIcon className="size-4" />
-              Удалить
+              {t("Удалить")}
             </Button>
           </>
         }
@@ -434,7 +434,7 @@ export function CleanupTab({
         <ul className="max-h-48 space-y-1 overflow-auto rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs text-slate-300">
           {selectedCategories.map((category) => (
             <li key={category.id} className="flex justify-between gap-3">
-              <span className="truncate">{category.name}</span>
+              <span className="truncate">{t(category.name)}</span>
               <span className="tabular-nums text-slate-400">{formatBytes(remaining(category))}</span>
             </li>
           ))}
@@ -451,7 +451,7 @@ export function CleanupTab({
               setPreview(result);
             }}
           >
-            Показать, что будет удалено
+            {t("Показать, что будет удалено")}
           </Button>
 
           {preview ? (
@@ -459,7 +459,7 @@ export function CleanupTab({
               {preview.categories.map((category) => (
                 <div key={category.id}>
                   <p className="text-[11px] font-medium text-slate-200">
-                    {category.name} · {formatBytes(category.totalBytes)} · {formatCount(category.totalFiles)} файлов
+                    {t(category.name)} · {formatBytes(category.totalBytes)} · {formatCount(category.totalFiles)} {t("файлов")}
                   </p>
                   <ul className="mt-1 space-y-0.5">
                     {category.entries.slice(0, 20).map((entry) => (
@@ -469,7 +469,7 @@ export function CleanupTab({
                     ))}
                   </ul>
                   {category.truncated ? (
-                    <p className="mt-0.5 text-[10px] text-slate-600">…показаны крупнейшие элементы</p>
+                    <p className="mt-0.5 text-[10px] text-slate-600">{t("…показаны крупнейшие элементы")}</p>
                   ) : null}
                 </div>
               ))}

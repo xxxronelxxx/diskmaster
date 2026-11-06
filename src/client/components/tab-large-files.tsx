@@ -7,6 +7,7 @@ import { queryClient, rpcClient } from "@/client/rpc-client";
 import { formatBytes, formatDate } from "@/client/lib/format";
 import { Badge, Button, Card, EmptyState, Modal, Progress, SectionTitle } from "./ui";
 import { CheckIcon, FilesIcon, FolderIcon, SpinnerIcon, TrashIcon } from "./icons";
+import { t, translateError } from "@/client/i18n";
 
 const THRESHOLDS = [100, 250, 500, 1024];
 
@@ -126,18 +127,18 @@ export function LargeFilesTab({
   return (
     <div className="space-y-5">
       <SectionTitle
-        title="Большие файлы"
-        subtitle="Крупные файлы в профиле пользователя и на других дисках — их удаление освобождает больше всего места"
+        title={t("Большие файлы")}
+        subtitle={t("Крупные файлы в профиле пользователя и на других дисках — их удаление освобождает больше всего места")}
         action={
           <Button variant="secondary" onClick={() => onStart(threshold)} loading={starting || scanning}>
             {scanning ? <SpinnerIcon className="size-4" /> : <FilesIcon className="size-4" />}
-            {scanning ? "Сканирование…" : "Сканировать"}
+            {scanning ? t("Сканирование…") : t("Сканировать")}
           </Button>
         }
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-slate-500">Минимальный размер:</span>
+        <span className="text-xs text-slate-500">{t("Минимальный размер:")}</span>
         {THRESHOLDS.map((value) => (
           <button
             key={value}
@@ -152,7 +153,7 @@ export function LargeFilesTab({
                 : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/10"
             }`}
           >
-            {value >= 1024 ? "1 ГБ" : `${value} МБ`}
+            {value >= 1024 ? t("1 ГБ") : `${value} МБ`}
           </button>
         ))}
       </div>
@@ -162,14 +163,14 @@ export function LargeFilesTab({
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Поиск по пути"
+            placeholder={t("Поиск по пути")}
             className="min-w-48 flex-1 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-200 outline-none placeholder:text-slate-600 focus:border-emerald-400/40"
           />
           <button
             onClick={() => setExtension(null)}
             className={`rounded-lg border px-2.5 py-1 text-xs ${extension === null ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200" : "border-white/10 bg-white/[0.04] text-slate-300"}`}
           >
-            Все
+            {t("Все")}
           </button>
           {extensions.slice(0, 8).map((value) => (
             <button
@@ -185,9 +186,9 @@ export function LargeFilesTab({
             onChange={(event) => setAge(event.target.value as "all" | "6" | "12")}
             className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs text-slate-300 outline-none"
           >
-            <option value="all">Любая дата</option>
-            <option value="6">старше 6 мес.</option>
-            <option value="12">старше 12 мес.</option>
+            <option value="all">{t("Любая дата")}</option>
+            <option value="6">{t("старше 6 мес.")}</option>
+            <option value="12">{t("старше 12 мес.")}</option>
           </select>
           <Button size="sm" variant="secondary" onClick={() => void exportCsv()} loading={exporting}>
             CSV
@@ -200,7 +201,7 @@ export function LargeFilesTab({
           <div className="flex items-center justify-between text-sm">
             <span className="flex items-center gap-2 text-slate-100">
               <SpinnerIcon className="size-4 text-sky-300" />
-              Поиск файлов больше {threshold} МБ…
+              {t("Поиск файлов больше")} {threshold} {t("МБ…")}
             </span>
             <span className="tabular-nums text-slate-400">{job.percent}%</span>
           </div>
@@ -212,11 +213,11 @@ export function LargeFilesTab({
       {!job ? (
         <EmptyState
           icon={<FilesIcon className="size-6" />}
-          title="Ещё не сканировали"
-          description={`Запустим поиск файлов больше ${threshold} МБ в вашем профиле и на остальных локальных дисках. Сканирование выводит и категории мусора — оба раздела используют один проход.`}
+          title={t("Ещё не сканировали")}
+          description={t("Запустим поиск файлов больше {size} МБ в вашем профиле и на остальных локальных дисках. Сканирование выводит и категории мусора — оба раздела используют один проход.", { size: threshold })}
           action={
             <Button variant="primary" onClick={() => onStart(threshold)} loading={starting}>
-              Сканировать диск
+              {t("Сканировать диск")}
             </Button>
           }
         />
@@ -226,12 +227,12 @@ export function LargeFilesTab({
         <Card className="border-emerald-400/25 bg-emerald-500/[0.07] p-4">
           <p className="flex items-center gap-2 text-sm font-medium text-emerald-100">
             <CheckIcon className="size-4" />
-            Перемещено в корзину: {freedNotice.count} файлов · {formatBytes(freedNotice.bytes)}
+            {t("Перемещено в корзину:")} {freedNotice.count} {t("файлов ·")} {formatBytes(freedNotice.bytes)}
           </p>
           {freedNotice.errors.length > 0 ? (
             <ul className="mt-1.5 space-y-0.5 text-[11px] text-amber-200/80">
               {freedNotice.errors.map((error) => (
-                <li key={error}>· {error}</li>
+                <li key={error}>· {translateError(error)}</li>
               ))}
             </ul>
           ) : null}
@@ -241,8 +242,8 @@ export function LargeFilesTab({
       {finished && visibleFiles.length === 0 ? (
         <EmptyState
           icon={<CheckIcon className="size-6" />}
-          title="Больших файлов не найдено"
-          description={`Файлов больше ${threshold} МБ на дисках нет. Можно снизить порог или проверить категории мусора.`}
+          title={t("Больших файлов не найдено")}
+          description={t("Файлов больше {size} МБ на дисках нет. Можно снизить порог или проверить категории мусора.", { size: threshold })}
         />
       ) : null}
 
@@ -260,15 +261,15 @@ export function LargeFilesTab({
               />
               <div>
                 <p className="text-sm text-slate-100">
-                  {visibleFiles.length} файлов · {formatBytes(totalBytes)}
+                  {visibleFiles.length} {t("файлов ·")} {formatBytes(totalBytes)}
                 </p>
                 {job?.largeFilesTruncated ? (
-                  <p className="text-[11px] text-slate-500">показаны самые крупные</p>
+                  <p className="text-[11px] text-slate-500">{t("показаны самые крупные")}</p>
                 ) : null}
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <Badge variant="neutral">в корзину</Badge>
+              <Badge variant="neutral">{t("в корзину")}</Badge>
               <Button
                 variant="danger"
                 size="sm"
@@ -276,7 +277,7 @@ export function LargeFilesTab({
                 onClick={() => setConfirming(true)}
               >
                 <TrashIcon className="size-3.5" />
-                Удалить {selectedBytes > 0 ? formatBytes(selectedBytes) : ""}
+                {t("Удалить")} {selectedBytes > 0 ? formatBytes(selectedBytes) : ""}
               </Button>
             </div>
           </div>
@@ -312,7 +313,7 @@ export function LargeFilesTab({
                     <p className="text-[11px] text-slate-500">{formatDate(file.modified)}</p>
                   </div>
                   <button
-                    title="Показать в проводнике"
+                    title={t("Показать в проводнике")}
                     onClick={(event) => {
                       event.preventDefault();
                       void rpcClient.system.reveal({ path: file.path });
@@ -331,21 +332,20 @@ export function LargeFilesTab({
       <Modal
         open={confirming}
         onClose={() => setConfirming(false)}
-        title="Переместить файлы в корзину?"
+        title={t("Переместить файлы в корзину?")}
         description={
           <>
-            {selectedFiles.length} файлов на <b className="text-white">{formatBytes(selectedBytes)}</b>.
-            Их можно будет восстановить из корзины, пока она не очищена.
+            {selectedFiles.length} {t("файлов на")} <b className="text-white">{formatBytes(selectedBytes)}</b>{t(". Их можно будет восстановить из корзины, пока она не очищена.")}
           </>
         }
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirming(false)}>
-              Отмена
+              {t("Отмена")}
             </Button>
             <Button variant="danger" loading={deleteMutation.isPending} onClick={handleDelete}>
               <TrashIcon className="size-4" />
-              В корзину
+              {t("В корзину")}
             </Button>
           </>
         }

@@ -11,6 +11,7 @@ import {
   RefreshIcon,
   SpinnerIcon,
 } from "./icons";
+import { t } from "@/client/i18n";
 
 type RunResult = { id: string; name: string; ok: boolean; output: string };
 
@@ -67,11 +68,11 @@ export function UpdatesTab() {
   return (
     <div className="space-y-5">
       <SectionTitle
-        title="Обновления программ"
+        title={t("Обновления программ")}
         subtitle={
           listing?.available
-            ? `${formatCount(updates.length)} пакетов можно обновить через winget`
-            : "Обновление установленных приложений через диспетчер пакетов Windows"
+            ? t("{count} пакетов можно обновить через winget", { count: formatCount(updates.length) })
+            : t("Обновление установленных приложений через диспетчер пакетов Windows")
         }
         action={
           <div className="flex gap-2">
@@ -81,7 +82,7 @@ export function UpdatesTab() {
               loading={updatesQuery.isFetching && !busy}
             >
               <RefreshIcon className="size-4" />
-              Проверить
+              {t("Проверить")}
             </Button>
             <Button
               variant="primary"
@@ -89,7 +90,7 @@ export function UpdatesTab() {
               onClick={() => setConfirmAll(true)}
             >
               <DownloadIcon className="size-4" />
-              Обновить всё
+              {t("Обновить всё")}
             </Button>
           </div>
         }
@@ -100,7 +101,7 @@ export function UpdatesTab() {
           <div className="flex items-center justify-between text-sm">
             <span className="flex items-center gap-2 text-slate-100">
               <SpinnerIcon className="size-4 text-sky-300" />
-              Обновление {progress.done + 1} из {progress.total}…
+              {t("Обновление")} {progress.done + 1} {t("из")} {progress.total}…
             </span>
             <span className="tabular-nums text-slate-400">
               {Math.round((progress.done / progress.total) * 100)}%
@@ -120,8 +121,8 @@ export function UpdatesTab() {
       {results.length > 0 && !progress ? (
         <Card className="p-4">
           <p className="text-sm font-medium text-slate-100">
-            Готово: обновлено {succeeded}
-            {failed > 0 ? `, с ошибкой ${failed}` : ""}
+            {t("Готово: обновлено")} {succeeded}
+            {failed > 0 ? t(", с ошибкой {count}", { count: failed }) : ""}
           </p>
           <div className="mt-2 space-y-1.5">
             {results.map((result) => (
@@ -131,7 +132,7 @@ export function UpdatesTab() {
                 </span>
                 {!result.ok && result.output ? (
                   <details className="mt-0.5">
-                    <summary className="cursor-pointer text-slate-500">журнал</summary>
+                    <summary className="cursor-pointer text-slate-500">{t("журнал")}</summary>
                     <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg bg-black/40 p-2 font-mono text-[10px] text-slate-400">
                       {result.output}
                     </pre>
@@ -147,7 +148,7 @@ export function UpdatesTab() {
         <Card className="p-6">
           <div className="flex items-center gap-2 text-sm text-slate-300">
             <SpinnerIcon className="size-4 text-sky-300" />
-            Опрашиваем winget — это может занять до минуты…
+            {t("Опрашиваем winget — это может занять до минуты…")}
           </div>
           <div className="mt-3 space-y-2">
             {[0, 1, 2].map((index) => (
@@ -160,15 +161,14 @@ export function UpdatesTab() {
       {listing && !listing.available ? (
         <Card className="border-amber-400/25 bg-amber-400/[0.06] p-4">
           <p className="flex items-center gap-2 text-sm font-medium text-amber-100">
-            <AlertIcon className="size-4" /> winget недоступен
+            <AlertIcon className="size-4" /> {t("winget недоступен")}
           </p>
           <p className="mt-1 text-xs leading-relaxed text-amber-200/80">
             {listing.error ??
-              "Установите «Установщик приложений» (App Installer) из Microsoft Store, чтобы обновлять программы."}
+              t("Установите «Установщик приложений» (App Installer) из Microsoft Store, чтобы обновлять программы.")}
           </p>
           <p className="mt-2 text-[11px] text-amber-200/60">
-            Проверка выполняется командой winget upgrade. Если приложение установлено, но
-            winget не найден — возможно, оно отключено в политиках системы.
+            {t("Проверка выполняется командой winget upgrade. Если приложение установлено, но winget не найден — возможно, оно отключено в политиках системы.")}
           </p>
         </Card>
       ) : null}
@@ -176,9 +176,9 @@ export function UpdatesTab() {
       {listing?.available && updates.length === 0 && !updatesQuery.isLoading ? (
         <Card className="border-emerald-400/25 bg-emerald-500/[0.06] p-6 text-center">
           <CheckIcon className="mx-auto size-7 text-emerald-300" />
-          <p className="mt-2 text-sm text-emerald-100">Все программы обновлены</p>
+          <p className="mt-2 text-sm text-emerald-100">{t("Все программы обновлены")}</p>
           <p className="mt-1 text-xs text-emerald-200/60">
-            Пакетов с доступными обновлениями не найдено.
+            {t("Пакетов с доступными обновлениями не найдено.")}
           </p>
         </Card>
       ) : null}
@@ -209,7 +209,7 @@ export function UpdatesTab() {
                   loading={running === update.id}
                   onClick={() => void runUpgrade([update.id])}
                 >
-                  Обновить
+                  {t("Обновить")}
                 </Button>
               </div>
             ))}
@@ -220,22 +220,20 @@ export function UpdatesTab() {
       <Modal
         open={confirmAll}
         onClose={() => setConfirmAll(false)}
-        title="Обновить все программы?"
+        title={t("Обновить все программы?")}
         description={
           <>
-            Будет последовательно обновлено <b className="text-white">{updates.length}</b> пакетов
-            через winget в тихом режиме. Это может занять 10–30 минут, в зависимости от
-            размера загрузок.
+            {t("Будет последовательно обновлено")} <b className="text-white">{updates.length}</b> {t("пакетов через winget в тихом режиме. Это может занять 10–30 минут, в зависимости от размера загрузок.")}
           </>
         }
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirmAll(false)}>
-              Отмена
+              {t("Отмена")}
             </Button>
             <Button variant="primary" onClick={() => void runUpgrade(updates.map((update) => update.id))}>
               <DownloadIcon className="size-4" />
-              Обновить всё
+              {t("Обновить всё")}
             </Button>
           </>
         }
