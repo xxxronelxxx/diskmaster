@@ -310,7 +310,7 @@ mod tests {
 
     #[test]
     fn default_schedule_never_cleans_the_recycle_bin() {
-        assert!(!DEFAULT_SCHEDULE
+        assert!(!ScheduleConfig::default()
             .categories
             .iter()
             .any(|id| id == "recycle-bin"));

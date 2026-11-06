@@ -321,7 +321,6 @@ impl Default for ScheduleConfig {
                 "thumbnails".into(),
                 "inet-cache".into(),
                 "dx-cache".into(),
-                "recycle-bin".into(),
             ],
             threshold_mb: 0,
             last_run_at: None,
