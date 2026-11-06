@@ -359,3 +359,41 @@ export type WidgetStatus = {
   settings: WidgetSettings;
   log: string | null;
 };
+
+/* ------------------------------ maintenance ------------------------------- */
+
+export type DiskHealth = {
+  deviceId: string;
+  name: string;
+  mediaType: number | null;
+  size: number;
+  health: number | null;
+  operational: number[];
+  serial: string | null;
+  temperature: number | null;
+  wear: number | null;
+  powerOnHours: number | null;
+  readErrors: number | null;
+  writeErrors: number | null;
+};
+
+export type SensorInfo = {
+  name: string;
+  sensorType: string;
+  value: number;
+  identifier: string | null;
+};
+
+export type RestorePoint = {
+  sequence: number;
+  description: string | null;
+  createdAt: string | null;
+  kind: number | null;
+};
+
+export type MaintenanceStatus = {
+  disks: DiskHealth[];
+  sensors: SensorInfo[];
+  restorePoints: RestorePoint[];
+  helperAvailable: boolean;
+};

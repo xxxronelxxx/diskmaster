@@ -33,6 +33,8 @@ cd src-tauri && cargo clippy -- -D warnings
 - Metrics/processes use `sysinfo`; programs and startup use `winreg`; the recycle
   bin uses `SHQueryRecycleBin`; the scheduler uses `schtasks`. Do not reintroduce
   PowerShell for these paths.
+- The elevated helper is a separate binary (`src/helper.rs`). Its operations are
+  a fixed allow-list; never accept raw shell commands or arbitrary paths.
 - The widget is a second Tauri window (`widget.html`) with Win32 z-order and
   click-through applied from `widget.rs`; it is not a separate process.
 - There is no PowerShell dependency anymore. Do not add PowerShell scripts or

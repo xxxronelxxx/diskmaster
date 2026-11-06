@@ -1,10 +1,11 @@
 [package]
 name = "disk-master"
-version = "1.5.0"
+version = "1.6.0"
 description = "Очистка диска, анализ места и мониторинг Windows"
 authors = ["Development SPB"]
 edition = "2021"
 rust-version = "1.77"
+default-run = "disk-master"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -30,9 +31,13 @@ windows-sys = { version = "0.59", features = [
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
   "Win32_Globalization",
+  "Win32_System_Restore",
+  "Win32_System_Registry",
+  "Win32_System_Threading",
 ] }
 chrono = "0.4"
 wait-timeout = "0.2"
+wmi = "0.18"
 arboard = "3"
 jwalk = "0.8"
 
@@ -41,3 +46,7 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 strip = true
+
+[[bin]]
+name = "DiskMasterHelper"
+path = "src/helper.rs"

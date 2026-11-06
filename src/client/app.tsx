@@ -26,6 +26,7 @@ import { UpdatesTab } from "./components/tab-updates";
 import { StartupTab } from "./components/tab-startup";
 import { ScheduleTab } from "./components/tab-schedule";
 import { HistoryTab } from "./components/tab-history";
+import { MaintenanceTab } from "./components/tab-maintenance";
 import { WidgetTab } from "./components/tab-widget";
 import { UpdateBanner } from "./components/update-banner";
 import { AboutModal } from "./components/about-modal";
@@ -43,6 +44,7 @@ type TabId =
   | "startup"
   | "schedule"
   | "history"
+  | "maintenance"
   | "widget";
 
 type TabDef = {
@@ -56,6 +58,7 @@ const TABS: TabDef[] = [
   { id: "overview", label: "Обзор", icon: GaugeIcon, group: "Система" },
   { id: "monitor", label: "Мониторинг", icon: GaugeIcon, group: "Система" },
   { id: "history", label: "История места", icon: RefreshIcon, group: "Система" },
+  { id: "maintenance", label: "Обслуживание", icon: ShieldIcon, group: "Система" },
   { id: "cleanup", label: "Очистка", icon: SparkleIcon, group: "Освободить место" },
   { id: "folders", label: "Анализ диска", icon: FilesIcon, group: "Освободить место" },
   { id: "files", label: "Большие файлы", icon: FilesIcon, group: "Освободить место" },
@@ -326,6 +329,7 @@ function App() {
 
             {tab === "monitor" ? <MonitorTab /> : null}
             {tab === "history" ? <HistoryTab /> : null}
+            {tab === "maintenance" ? <MaintenanceTab /> : null}
 
             {tab === "cleanup" ? (
               <CleanupTab

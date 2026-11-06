@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
 
 use crate::clean_history::CleanHistoryEntry;
+use crate::maintenance::{self, MaintenanceStatus};
 use crate::state::AppState;
 use crate::types::*;
 use crate::{
@@ -251,6 +252,23 @@ pub async fn preview_clean(input: CleanInput) -> CmdResult<CleanPreview> {
 #[tauri::command]
 pub fn clean_history() -> Vec<CleanHistoryEntry> {
     crate::clean_history::read(100)
+}
+
+#[tauri::command]
+pub async fn maintenance_status() -> CmdResult<MaintenanceStatus> {
+    blocking(maintenance::status).await
+}
+
+#[derive(Deserialize)]
+pub struct SystemOpInput {
+    pub op: String,
+    #[serde(default)]
+    pub payload: serde_json::Value,
+}
+
+#[tauri::command]
+pub async fn system_operation(input: SystemOpInput) -> CmdResult<serde_json::Value> {
+    blocking(move || maintenance::run(&input.op, input.payload)).await?
 }
 
 #[derive(Deserialize)]

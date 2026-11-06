@@ -18,6 +18,12 @@ const key =
 const env = { ...process.env };
 const args = ["tauri", "build"];
 
+spawnSync("tsx", ["scripts/build-helper.ts"], {
+  stdio: "inherit",
+  cwd: root,
+  shell: true,
+});
+
 const sync = spawnSync("pnpm", ["version:sync"], {
   stdio: "inherit",
   cwd: root,

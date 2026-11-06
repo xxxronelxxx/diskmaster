@@ -3,11 +3,13 @@
 mod clean_history;
 mod commands;
 mod duplicates;
+mod elevated;
 mod folders;
 mod guard;
 mod hash_cache;
 mod history;
 mod logging;
+mod maintenance;
 mod metrics;
 mod paths;
 mod programs;
@@ -305,6 +307,8 @@ fn main() {
             commands::preview_clean,
             commands::clean_history,
             commands::write_text_file,
+            commands::maintenance_status,
+            commands::system_operation,
             commands::delete_large_files,
             commands::reveal,
             commands::folder_roots,

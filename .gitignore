@@ -33,6 +33,7 @@ release-app/
 output/
 src-tauri/target/
 src-tauri/gen/
+src-tauri/resources/DiskMasterHelper.exe
 
 # Updater / signing artifacts
 *.sig

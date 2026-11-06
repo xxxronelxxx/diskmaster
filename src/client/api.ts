@@ -9,6 +9,7 @@ import type {
   FolderAnalysis,
   HistorySummary,
   InstalledProgram,
+  MaintenanceStatus,
   MetricsState,
   ProcessInfo,
   RecycleResult,
@@ -102,6 +103,10 @@ export const api = {
   widgetStop: () => invoke<{ ok: boolean }>("widget_stop"),
   widgetSave: (input: Partial<WidgetSettings>) => invoke<WidgetSettings>("widget_save", { input }),
   widgetAutostart: (input: { enabled: boolean }) => invoke<{ ok: boolean }>("widget_autostart", { input }),
+
+  maintenanceStatus: () => invoke<MaintenanceStatus>("maintenance_status"),
+  systemOperation: (input: { op: string; payload?: unknown }) =>
+    invoke<{ ok: boolean; message: string; data: unknown }>("system_operation", { input }),
 };
 
 /**
@@ -169,5 +174,6 @@ export const queryClient = {
     widgetStop: { mutationOptions: mutation<Record<string, never> | undefined, { ok: boolean }>("widget_stop") },
     widgetSave: { mutationOptions: mutation<Partial<WidgetSettings>, WidgetSettings>("widget_save") },
     widgetAutostart: { mutationOptions: mutation<{ enabled: boolean }, { ok: boolean }>("widget_autostart") },
+    maintenanceStatus: { queryOptions: () => query<MaintenanceStatus>("maintenance_status") },
   },
 };

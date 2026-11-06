@@ -63,6 +63,7 @@ const env = { ...process.env, CI: "true" };
 const run = (command: string) => execSync(command, { stdio: "inherit", cwd: root, env });
 
 run("pnpm version:sync");
+run("tsx scripts/build-helper.ts");
 run("pnpm tauri build");
 
 const bundleDir = path.join(root, "src-tauri", "target", "release", "bundle", "nsis");
@@ -99,6 +100,12 @@ const portableDir = path.join(outputDir, `DiskMaster-portable-${version}`);
 rmSync(portableDir, { recursive: true, force: true });
 mkdirSync(portableDir, { recursive: true });
 copyFileSync(exePath, path.join(portableDir, "DiskMaster.exe"));
+const helperSource = path.join(root, "src-tauri", "resources", "DiskMasterHelper.exe");
+const helperDir = path.join(portableDir, "resources");
+if (existsSync(helperSource)) {
+  mkdirSync(helperDir, { recursive: true });
+  copyFileSync(helperSource, path.join(helperDir, "DiskMasterHelper.exe"));
+}
 writeFileSync(path.join(portableDir, "portable.marker"), "", "utf8");
 writeFileSync(
   path.join(portableDir, "README.txt"),
@@ -125,6 +132,9 @@ writeFileSync(
   zipSync(
     {
       "DiskMaster.exe": readFileSync(path.join(portableDir, "DiskMaster.exe")),
+      "resources/DiskMasterHelper.exe": readFileSync(
+        path.join(portableDir, "resources", "DiskMasterHelper.exe"),
+      ),
       "README.txt": readFileSync(path.join(portableDir, "README.txt")),
       "portable.marker": new Uint8Array(),
     },
