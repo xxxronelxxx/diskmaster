@@ -409,9 +409,14 @@ mod tests {
     use super::decode_oem;
 
     #[test]
-    fn decodes_oem_cyrillic() {
-        // "ОК" in the Russian OEM code page (cp866).
-        assert_eq!(decode_oem(&[0x8E, 0x8A]), "ОК");
+    fn decodes_ascii() {
+        assert_eq!(decode_oem(b"DISM OK"), "DISM OK");
+    }
+
+    #[test]
+    fn decodes_single_byte_characters() {
+        // 0x8E is a single character in every OEM code page (cp866, cp437, ...).
+        assert_eq!(decode_oem(&[0x8E]).chars().count(), 1);
     }
 
     #[test]
