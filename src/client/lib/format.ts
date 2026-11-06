@@ -1,8 +1,13 @@
-const numberFormatter = new Intl.NumberFormat("ru-RU");
+import { currentLocale } from "@/client/i18n";
+
+function intlLocale(): string {
+  return currentLocale() === "en" ? "en-US" : "ru-RU";
+}
 
 export function formatBytes(bytes: number, digits = 1): string {
-  if (!bytes || bytes <= 0) return "0 Б";
-  const units = ["Б", "КБ", "МБ", "ГБ", "ТБ"];
+  const english = currentLocale() === "en";
+  if (!bytes || bytes <= 0) return english ? "0 B" : "0 Б";
+  const units = english ? ["B", "KB", "MB", "GB", "TB"] : ["Б", "КБ", "МБ", "ГБ", "ТБ"];
   let value = bytes;
   let unit = 0;
   while (value >= 1024 && unit < units.length - 1) {
@@ -10,11 +15,15 @@ export function formatBytes(bytes: number, digits = 1): string {
     unit += 1;
   }
   const decimals = unit === 0 ? 0 : value >= 100 ? 0 : digits;
-  return `${value.toFixed(decimals).replace(".", ",")} ${units[unit]}`;
+  const formatted = new Intl.NumberFormat(intlLocale(), {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(value);
+  return `${formatted} ${units[unit]}`;
 }
 
 export function formatCount(value: number): string {
-  return numberFormatter.format(value);
+  return new Intl.NumberFormat(intlLocale()).format(value);
 }
 
 export function formatDate(value: number | string | null): string {
@@ -30,7 +39,7 @@ export function formatDate(value: number | string | null): string {
         )
         : new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("ru-RU", {
+  return new Intl.DateTimeFormat(intlLocale(), {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -44,6 +53,10 @@ export function formatUptime(lastBoot: string | null): string {
   const minutes = Math.max(0, Math.floor((Date.now() - started) / 60000));
   const days = Math.floor(minutes / 1440);
   const hours = Math.floor((minutes % 1440) / 60);
+  if (currentLocale() === "en") {
+    if (days > 0) return `${days} d ${hours} h`;
+    return `${hours} h ${minutes % 60} min`;
+  }
   if (days > 0) return `${days} д ${hours} ч`;
   return `${hours} ч ${minutes % 60} мин`;
 }

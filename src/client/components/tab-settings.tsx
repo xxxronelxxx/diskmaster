@@ -5,6 +5,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import type { AppSettings } from "@/shared/types";
 import { api } from "@/client/api";
 import { queryClient } from "@/client/rpc-client";
+import { useI18n } from "@/client/i18n-provider";
 import { AlertIcon, CheckIcon, DownloadIcon, FolderIcon, RefreshIcon, SettingsIcon, TrashIcon } from "./icons";
 import { Badge, Button, Card, SectionTitle, Switch } from "./ui";
 
@@ -41,6 +42,7 @@ function SettingRow({
 }
 
 export function SettingsTab() {
+  const { locale, changeLocale } = useI18n();
   const stateQuery = useQuery(queryClient.system.settingsState.queryOptions());
   const state = stateQuery.data;
   const [draft, setDraft] = useState<AppSettings | null>(null);
@@ -201,6 +203,31 @@ export function SettingsTab() {
           </p>
         </Card>
       ) : null}
+
+      <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+        <div>
+          <p className="text-sm font-medium text-white">Язык интерфейса</p>
+          <p className="mt-0.5 text-[11px] text-slate-500">
+            Переключается сразу, без перезапуска. Настройка хранится на этом компьютере.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant={locale === "ru" ? "primary" : "secondary"}
+            onClick={() => changeLocale("ru")}
+          >
+            Русский
+          </Button>
+          <Button
+            size="sm"
+            variant={locale === "en" ? "primary" : "secondary"}
+            onClick={() => changeLocale("en")}
+          >
+            English
+          </Button>
+        </div>
+      </Card>
 
       {state?.portable ? (
         <Card className="border-amber-400/25 bg-amber-400/[0.06] p-3.5">
