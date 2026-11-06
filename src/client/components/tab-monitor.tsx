@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { MetricsState, ProcessInfo } from "@/shared/types";
 import { queryClient } from "@/client/rpc-client";
-import { formatBytes, formatCount } from "@/client/lib/format";
+import { formatBytes } from "@/client/lib/format";
 import { Badge, Button, Card, Modal, Progress, SectionTitle } from "./ui";
 import { Sparkline, BarMeter } from "./sparkline";
 import { AlertIcon, CpuIcon, MemoryIcon, PauseIcon, PlayIcon, RefreshIcon, SettingsIcon, SpinnerIcon, TrashIcon } from "./icons";

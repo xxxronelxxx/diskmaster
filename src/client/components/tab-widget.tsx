@@ -347,6 +347,7 @@ export function WidgetTab() {
                   ["showNet", "Сеть (входящий/исходящий)"],
                   ["showDrives", "Свободное место на диске"],
                   ["showTopProcess", "Самый тяжёлый процесс"],
+                  ["showTemperatures", "Температуры CPU и диска"],
                   ["showTitle", "Заголовок"],
                 ] as [keyof WidgetSettings, string][]
               ).map(([key, label]) => (
@@ -398,6 +399,7 @@ export function WidgetTab() {
                     settings.showNet ? ["СЕТЬ", "↓ 24 КБ ↑ 3 КБ", 12] : null,
                     settings.showDrives ? ["СВОБОДНО", "8,8 ГБ", 96] : null,
                     settings.showTopProcess ? ["ТОП", "java 3,4 ГБ", 30] : null,
+                    settings.showTemperatures ? ["ТЕМП", "CPU 64° · диск 50°", 64] : null,
                   ]
                     .filter(Boolean)
                     .map((row) => {

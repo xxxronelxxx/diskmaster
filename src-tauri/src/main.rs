@@ -166,13 +166,27 @@ fn remove_run_key() {
     }
 }
 
-pub fn autostart_enabled() -> bool {
-    let run_key = RegKey::predef(HKEY_CURRENT_USER)
+fn run_key_exists() -> bool {
+    RegKey::predef(HKEY_CURRENT_USER)
         .open_subkey_with_flags(AUTOSTART_KEY, KEY_READ)
         .ok()
         .and_then(|key| key.get_value::<String, _>(AUTOSTART_NAME).ok())
-        .is_some();
-    run_key || task_exists()
+        .is_some()
+}
+
+pub fn autostart_enabled() -> bool {
+    run_key_exists() || task_exists()
+}
+
+/// Human-readable startup mode for diagnostics.
+pub fn autostart_mode() -> &'static str {
+    if task_exists() {
+        "task (highest)"
+    } else if run_key_exists() {
+        "run key"
+    } else {
+        "off"
+    }
 }
 
 /// Applies the startup policy: a plain Run key for normal autostart, or a

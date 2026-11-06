@@ -47,5 +47,11 @@ export default tseslint.config(
       "no-console": "warn",
       "no-warning-comments": ["warn", { terms: ["fixme"] }],
     },
+  },
+  {
+    files: ["scripts/**/*.ts"],
+    rules: {
+      "no-console": "off",
+    },
   }
 );

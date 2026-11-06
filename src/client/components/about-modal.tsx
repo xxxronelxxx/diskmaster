@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
-import type { SystemInfo } from "@/shared/types";
+import type { SensorsState, SettingsState, SystemInfo } from "@/shared/types";
 import type { Updater } from "@/client/lib/updater";
+import { queryClient } from "@/client/rpc-client";
 import { Button, Modal } from "./ui";
 import { t } from "@/client/i18n";
 
@@ -30,6 +32,31 @@ export function AboutModal({
   updater: Updater;
 }) {
   const [copied, setCopied] = useState(false);
+  const sensorsQuery = useQuery({
+    ...queryClient.system.sensorsState.queryOptions(),
+    enabled: open,
+  });
+  const settingsQuery = useQuery({
+    ...queryClient.system.settingsState.queryOptions(),
+    enabled: open,
+  });
+  const sensors = sensorsQuery.data as SensorsState | undefined;
+  const settings = settingsQuery.data as SettingsState | undefined;
+
+  const sensorsValue = !sensors
+    ? "…"
+    : sensors.running
+      ? `${sensors.pawnioInstalled ? `PawnIO ${sensors.pawnioVersion ?? ""}`.trim() : "без драйвера"} · ${sensors.sensors.length} датч.`
+      : sensors.error
+        ? `выключены: ${sensors.error}`
+        : "выключены";
+  const startupValue = !settings
+    ? "…"
+    : !settings.autostart
+      ? "выключен"
+      : settings.settings.alwaysAdmin
+        ? "задача Планировщика (админ)"
+        : "при входе в Windows";
 
   async function copyDiagnostics() {
     try {
@@ -55,6 +82,17 @@ export function AboutModal({
         <Row label="Издатель" value="Development SPB" />
         {info ? <Row label="Система" value={`${info.os} ${info.version} (${info.build})`} /> : null}
         {info ? <Row label="Права" value={info.admin ? "администратор" : "обычные"} /> : null}
+        <Row label="Датчики" value={sensorsValue} />
+        <Row label="Автозапуск" value={startupValue} />
+        <Row
+          label="Горячие клавиши"
+          value={
+            settings
+              ? `${settings.settings.hotkeyShow || "—"} / ${settings.settings.hotkeyWidget || "—"}`
+              : "…"
+          }
+          mono
+        />
         <Row label="Данные" value="%LOCALAPPDATA%\DiskMasterData" mono />
         <Row label="Журнал" value="…\DiskMasterData\logs\app.log" mono />
       </div>

@@ -346,6 +346,7 @@ export type WidgetSettings = {
   showNet: boolean;
   showDrives: boolean;
   showTopProcess: boolean;
+  showTemperatures: boolean;
   bars: boolean;
   zMode: "normal" | "top" | "desktop";
   clickThrough: boolean;

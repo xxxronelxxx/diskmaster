@@ -103,6 +103,31 @@ fn diagnostics_text(app: &tauri::AppHandle) -> String {
         .rev()
         .collect();
 
+    let sensor_state = sensors::state();
+    let sensor_line = if sensor_state.running {
+        format!(
+            "running, pawnio={}, values={}{}",
+            sensor_state
+                .pawnio_version
+                .clone()
+                .unwrap_or_else(|| "no".into()),
+            sensor_state.sensors.len(),
+            sensor_state
+                .error
+                .map(|error| format!(", error={error}"))
+                .unwrap_or_default()
+        )
+    } else {
+        format!(
+            "off{}",
+            sensor_state
+                .error
+                .map(|error| format!(", error={error}"))
+                .unwrap_or_default()
+        )
+    };
+    let hotkeys = crate::settings::current();
+
     format!(
         "Диск-Мастер {}
 portable={}
@@ -111,6 +136,9 @@ OS={} {} ({})
 CPU={} / {} ядер, {} потоков
 RAM={} / {}
 admin={}
+sensors={}
+autostart={}
+hotkeys={} / {}
 
 Журнал:
 {}",
@@ -126,6 +154,10 @@ admin={}
         info.ram_total,
         info.ram_free,
         info.admin,
+        sensor_line,
+        crate::autostart_mode(),
+        hotkeys.hotkey_show,
+        hotkeys.hotkey_widget,
         tail.join(
             "
 "
@@ -914,6 +946,8 @@ pub struct WidgetData {
     latest: Option<MetricsSample>,
     drives: Vec<DriveInfo>,
     top: Option<ProcessInfo>,
+    cpu_temp: Option<f64>,
+    disk_temp: Option<f64>,
 }
 
 #[tauri::command]
@@ -927,11 +961,24 @@ pub async fn widget_data() -> CmdResult<WidgetData> {
         } else {
             None
         };
+        let sensor_state = sensors::state();
+        let cpu_temp = sensor_state
+            .sensors
+            .iter()
+            .find(|sensor| sensor.kind == "temperature" && sensor.hardware_type == "Cpu")
+            .map(|sensor| sensor.value);
+        let disk_temp = sensor_state
+            .sensors
+            .iter()
+            .find(|sensor| sensor.kind == "temperature" && sensor.hardware_type == "Storage")
+            .map(|sensor| sensor.value);
         WidgetData {
             settings,
             latest,
             drives,
             top,
+            cpu_temp,
+            disk_temp,
         }
     })
     .await

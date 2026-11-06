@@ -19,6 +19,8 @@ type WidgetData = {
   latest: MetricsSample | null;
   drives: DriveInfo[];
   top: ProcessInfo | null;
+  cpuTemp: number | null;
+  diskTemp: number | null;
 };
 
 type Menu = { x: number; y: number } | null;
@@ -95,7 +97,7 @@ export function WidgetView() {
 
   if (!data) return null;
 
-  const { settings, latest, drives, top } = data;
+  const { settings, latest, drives, top, cpuTemp, diskTemp } = data;
   const totalFree = drives.reduce((sum, drive) => sum + drive.free, 0);
   const totalSpace = drives.reduce((sum, drive) => sum + drive.total, 0);
 
@@ -190,6 +192,16 @@ export function WidgetView() {
                 accent={settings.accent}
                 bars={settings.bars}
               />
+            ) : null}
+            {settings.showTemperatures && (cpuTemp !== null || diskTemp !== null) ? (
+              <div className="mt-1 flex items-center justify-between text-[0.7em] text-white/50">
+                <span>Температура</span>
+                <span className="tabular-nums">
+                  {cpuTemp !== null ? `CPU ${cpuTemp.toFixed(0)}°` : ""}
+                  {cpuTemp !== null && diskTemp !== null ? " · " : ""}
+                  {diskTemp !== null ? `диск ${diskTemp.toFixed(0)}°` : ""}
+                </span>
+              </div>
             ) : null}
             {settings.showTopProcess && top ? (
               <div className="mt-1 truncate text-[0.7em] text-white/45">
