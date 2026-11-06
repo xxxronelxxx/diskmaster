@@ -4,6 +4,7 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 
 use serde::{Deserialize, Serialize};
@@ -127,6 +128,12 @@ fn is_admin() -> bool {
     unsafe { windows_sys::Win32::UI::Shell::IsUserAnAdmin() != 0 }
 }
 
+static LAST_ERROR: Mutex<Option<String>> = Mutex::new(None);
+
+fn set_last_error(message: Option<String>) {
+    *LAST_ERROR.lock().unwrap() = message;
+}
+
 pub fn state() -> SensorsState {
     let available = exe_path().is_some();
     let pawnio = pawnio_version();
@@ -163,6 +170,10 @@ pub fn state() -> SensorsState {
             updated_at = snapshot.generated_at;
             age_seconds = Some(age);
         }
+    }
+
+    if !fresh {
+        error = LAST_ERROR.lock().unwrap().clone();
     }
 
     SensorsState {
@@ -210,6 +221,7 @@ pub fn start() -> Result<SensorsState, String> {
     fs::create_dir_all(data_dir()).map_err(|error| error.to_string())?;
     let _ = fs::remove_file(stop_path());
     let _ = fs::remove_file(snapshot_path());
+    set_last_error(None);
 
     let parameters = format!(
         "--serve --out \"{}\" --stop \"{}\" --parent {}",
@@ -217,10 +229,22 @@ pub fn start() -> Result<SensorsState, String> {
         stop_path().display(),
         std::process::id()
     );
-    elevated::launch_detached(&exe, &parameters)?;
+    if let Err(error) = elevated::launch_detached(&exe, &parameters) {
+        set_last_error(Some(error.clone()));
+        return Err(error);
+    }
 
-    wait_for_snapshot(Duration::from_secs(15))
-        .ok_or_else(|| "Датчики не запустились за 15 секунд".to_string())
+    match wait_for_snapshot(Duration::from_secs(15)) {
+        Some(state) => {
+            set_last_error(None);
+            Ok(state)
+        }
+        None => {
+            let message = "Датчики не запустились за 15 секунд".to_string();
+            set_last_error(Some(message.clone()));
+            Err(message)
+        }
+    }
 }
 
 /// Installs PawnIO from the bundled signed installer and immediately starts the
@@ -235,6 +259,7 @@ pub fn install() -> Result<SensorsState, String> {
     let _ = fs::remove_file(stop_path());
     let _ = fs::remove_file(snapshot_path());
     let _ = fs::remove_file(install_result_path());
+    set_last_error(None);
 
     let parameters = format!(
         "--install-pawnio --serve --setup \"{}\" --install-out \"{}\" --out \"{}\" --stop \"{}\" --parent {}",
@@ -244,10 +269,19 @@ pub fn install() -> Result<SensorsState, String> {
         stop_path().display(),
         std::process::id()
     );
-    elevated::launch_detached(&exe, &parameters)?;
+    if let Err(error) = elevated::launch_detached(&exe, &parameters) {
+        set_last_error(Some(error.clone()));
+        return Err(error);
+    }
 
-    let result = wait_for_snapshot(Duration::from_secs(180))
-        .ok_or_else(|| "Установка не завершилась за 3 минуты".to_string())?;
+    let result = match wait_for_snapshot(Duration::from_secs(180)) {
+        Some(state) => state,
+        None => {
+            let message = "Установка не завершилась за 3 минуты".to_string();
+            set_last_error(Some(message.clone()));
+            return Err(message);
+        }
+    };
 
     let install = fs::read_to_string(install_result_path())
         .ok()
@@ -266,10 +300,12 @@ pub fn install() -> Result<SensorsState, String> {
                 .get("error")
                 .and_then(|value| value.as_str())
                 .unwrap_or("Не удалось установить PawnIO");
+            set_last_error(Some(message.to_string()));
             return Err(message.to_string());
         }
         let mut state = result;
         state.needs_reboot = reboot;
+        set_last_error(None);
         return Ok(state);
     }
 
@@ -277,6 +313,7 @@ pub fn install() -> Result<SensorsState, String> {
 }
 
 pub fn stop() -> SensorsState {
+    set_last_error(None);
     let path = stop_path();
     paths::ensure_parent(&path);
     let _ = fs::write(&path, b"stop");

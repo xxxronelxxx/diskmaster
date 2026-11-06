@@ -123,7 +123,7 @@ export function MaintenanceTab() {
         </Card>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid items-start gap-4 xl:grid-cols-2">
         <Card className="p-4">
           <div className="mb-3 flex items-center gap-2">
             <ShieldIcon className="size-4 text-emerald-300" />

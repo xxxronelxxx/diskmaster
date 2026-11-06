@@ -76,10 +76,10 @@ try {
   Start-Sleep -Seconds 16
   $null = Get-AppWindow
   Save-Shot 'u4-off.png'
-  $Result.steps += [ordered]@{ step = 'card'; installButton = [bool](Find-Named 'Установить и включить'); startButton = [bool](Find-Named 'Включить датчики') }
+  $Result.steps += [ordered]@{ step = 'card'; installButton = [bool](Find-Named 'Установить датчики') }
 
   Step 'open-install'
-  $installButton = Find-Named 'Установить и включить'
+  $installButton = Find-Named 'Установить датчики'
   $how = Invoke-Element $installButton
   $Result.steps += [ordered]@{ step = 'open-install'; found = [bool]$installButton; how = $how }
   Start-Sleep -Seconds 2
@@ -107,13 +107,12 @@ try {
 
   Start-Sleep -Seconds 2
   Save-Shot 'u4-on.png'
-  $Result.steps += [ordered]@{ step = 'ui'; stopButton = [bool](Find-Named 'Остановить'); updated = [bool](Find-Like '*обновлено*') }
-
-  Step 'stop'
-  $stop = Find-Named 'Остановить'
-  $how = Invoke-Element $stop
-  Start-Sleep -Seconds 3
-  $Result.steps += [ordered]@{ step = 'stop'; found = [bool]$stop; how = $how; service = @(Get-Process -Name DiskMasterSensors -ErrorAction SilentlyContinue).Count }
+  $Result.steps += [ordered]@{
+    step = 'ui'
+    installGone = -not [bool](Find-Named 'Установить датчики')
+    pawnioBadge = [bool](Find-Like '*PawnIO*')
+    stopGone = -not [bool](Find-Named 'Остановить')
+  }
 
   Step 'done'
 } catch {

@@ -75,18 +75,42 @@ namespace DiskMasterSensors
 
             var stopPath = Arg(args, "--stop") ?? outPath + ".stop";
             var parent = ArgInt(args, "--parent");
-            while (true)
-            {
-                if (parent > 0 && !ProcessExists(parent))
-                    break;
-                if (File.Exists(stopPath))
-                {
-                    TryDelete(stopPath);
-                    break;
-                }
+            SensorSession session = null;
+            var tick = 0;
 
-                WriteAtomic(outPath, ReadOnceJson(parent));
-                Thread.Sleep(3000);
+            try
+            {
+                while (true)
+                {
+                    if (parent > 0 && !ProcessExists(parent))
+                        break;
+                    if (File.Exists(stopPath))
+                    {
+                        TryDelete(stopPath);
+                        break;
+                    }
+
+                    string json;
+                    try
+                    {
+                        if (session == null)
+                            session = new SensorSession();
+                        json = SnapshotJson(session.Read(tick++), parent, null);
+                    }
+                    catch (Exception exception)
+                    {
+                        json = SnapshotJson(new List<Reading>(), parent, exception.Message);
+                        try { session?.Dispose(); } catch { }
+                        session = null;
+                    }
+
+                    WriteAtomic(outPath, json);
+                    Thread.Sleep(1000);
+                }
+            }
+            finally
+            {
+                try { session?.Dispose(); } catch { }
             }
 
             return 0;
@@ -129,26 +153,31 @@ namespace DiskMasterSensors
 
         private static string ReadOnceJson(int parent)
         {
-            var builder = new StringBuilder();
-            builder.Append('{');
-            builder.Append("\"ok\":true,");
-            builder.Append("\"generatedAt\":").Append(JsonString(DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture))).Append(',');
-            builder.Append("\"pid\":").Append(Process.GetCurrentProcess().Id).Append(',');
-            builder.Append("\"parent\":").Append(parent).Append(',');
-            builder.Append("\"admin\":").Append(IsAdmin() ? "true" : "false").Append(',');
-            builder.Append("\"pawnio\":").Append(PawnIo.IsInstalled ? "true" : "false").Append(',');
-
             var readings = new List<Reading>();
             string error = null;
             try
             {
-                readings = CollectReadings();
+                using (var session = new SensorSession())
+                    readings = session.Read(0);
             }
             catch (Exception exception)
             {
                 error = exception.Message;
             }
 
+            return SnapshotJson(readings, parent, error);
+        }
+
+        private static string SnapshotJson(List<Reading> readings, int parent, string error)
+        {
+            var builder = new StringBuilder();
+            builder.Append('{');
+            builder.Append("\"ok\":").Append(error == null ? "true" : "false").Append(',');
+            builder.Append("\"generatedAt\":").Append(JsonString(DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture))).Append(',');
+            builder.Append("\"pid\":").Append(Process.GetCurrentProcess().Id).Append(',');
+            builder.Append("\"parent\":").Append(parent).Append(',');
+            builder.Append("\"admin\":").Append(IsAdmin() ? "true" : "false").Append(',');
+            builder.Append("\"pawnio\":").Append(PawnIo.IsInstalled ? "true" : "false").Append(',');
             builder.Append("\"sensors\":[");
             for (var index = 0; index < readings.Count; index++)
             {
@@ -161,57 +190,77 @@ namespace DiskMasterSensors
             return builder.ToString();
         }
 
-        private static List<Reading> CollectReadings()
+        /// <summary>
+        /// Keeps the LibreHardwareMonitor session open between snapshots. Opening
+        /// it on every tick was expensive and added a visible lag.
+        /// </summary>
+        private sealed class SensorSession : IDisposable
         {
-            var readings = new List<Reading>();
-            var computer = new Computer
-            {
-                IsCpuEnabled = true,
-                IsGpuEnabled = true,
-                IsMotherboardEnabled = true,
-                IsStorageEnabled = true,
-                IsMemoryEnabled = true,
-                IsControllerEnabled = true,
-            };
+            private readonly Computer _computer;
 
-            try
+            public SensorSession()
             {
-                computer.Open();
-                foreach (var hardware in computer.Hardware)
-                    UpdateAll(hardware, 0);
-                // The GPU/ADL providers need a second pass before their
-                // temperature sensors appear.
-                Thread.Sleep(500);
-                foreach (var hardware in computer.Hardware)
-                    UpdateAll(hardware, 0);
-                foreach (var hardware in computer.Hardware)
+                _computer = new Computer
+                {
+                    IsCpuEnabled = true,
+                    IsGpuEnabled = true,
+                    IsMotherboardEnabled = true,
+                    IsStorageEnabled = true,
+                    IsMemoryEnabled = true,
+                    IsControllerEnabled = true,
+                };
+                _computer.Open();
+                UpdateAll(_computer, 0);
+                // The GPU/ADL providers need a second pass.
+                Thread.Sleep(400);
+                UpdateAll(_computer, 0);
+            }
+
+            public List<Reading> Read(int tick)
+            {
+                UpdateAll(_computer, tick);
+                var readings = new List<Reading>();
+                foreach (var hardware in _computer.Hardware)
                     Collect(hardware, readings, 0);
+
+                var amd = TryAmdSdk(readings);
+                if (amd != null)
+                    readings.Add(amd);
+
+                return readings
+                    .OrderBy(reading => reading.Kind == "temperature" ? 0 : 1)
+                    .ThenBy(reading => reading.Hardware)
+                    .ThenBy(reading => reading.Name)
+                    .ToList();
             }
-            finally
+
+            public void Dispose()
             {
-                try { computer.Close(); } catch { }
+                try { _computer.Close(); } catch { }
             }
-
-            var amd = TryAmdSdk(readings);
-            if (amd != null)
-                readings.Add(amd);
-
-            return readings
-                .OrderBy(reading => reading.Kind == "temperature" ? 0 : 1)
-                .ThenBy(reading => reading.Hardware)
-                .ThenBy(reading => reading.Name)
-                .ToList();
         }
 
-        private static void UpdateAll(IHardware hardware, int depth)
+        private static void UpdateAll(Computer computer, int tick)
+        {
+            foreach (var hardware in computer.Hardware)
+                UpdateAll(hardware, 0, tick);
+        }
+
+        private static void UpdateAll(IHardware hardware, int depth, int tick)
         {
             if (depth > 4)
                 return;
 
-            try { hardware.Update(); } catch { }
+            // SMART polling once a second is unnecessary; storage values change
+            // slowly and the read can wake the drive.
+            var refresh = hardware.HardwareType != HardwareType.Storage || tick % 5 == 0;
+            if (refresh)
+            {
+                try { hardware.Update(); } catch { }
+            }
 
             foreach (var sub in hardware.SubHardware)
-                UpdateAll(sub, depth + 1);
+                UpdateAll(sub, depth + 1, tick);
         }
 
         private static void Collect(IHardware hardware, List<Reading> readings, int depth)
@@ -249,13 +298,44 @@ namespace DiskMasterSensors
                 readings.Add(new Reading
                 {
                     Kind = kind,
-                    Name = sensor.Name,
+                    Name = ReadableName(sensor.Name, sensor.SensorType),
                     Hardware = hardware.Name,
                     HardwareType = hardware.HardwareType.ToString(),
                     Value = Math.Round(value, 1),
                     Identifier = sensor.Identifier.ToString(),
                 });
             }
+        }
+
+        private static string ReadableName(string name, SensorType type)
+        {
+            var lower = name.ToLowerInvariant();
+
+            if (type == SensorType.Fan)
+            {
+                if (lower.Contains("cpu")) return "Вентилятор процессора";
+                if (lower.Contains("gpu")) return "Вентилятор видеокарты";
+                if (lower.Contains("system") || lower.Contains("case")) return "Корпусной вентилятор";
+                if (lower.StartsWith("fan #")) return "Вентилятор " + name.Substring(6).Trim();
+                return "Вентилятор";
+            }
+
+            if (type == SensorType.Control)
+                return "Обороты вентилятора";
+
+            if (lower.Contains("tctl") || lower.Contains("tdie")) return "Температура процессора";
+            if (lower == "package") return "Температура процессора";
+            if (lower == "core max") return "Максимум по ядрам";
+            if (lower == "core average") return "Среднее по ядрам";
+            if (lower.StartsWith("core #")) return "Ядро " + name.Substring(6).Trim();
+            if (lower.StartsWith("ccd")) return "Кристалл";
+            if (lower.Contains("composite")) return "Температура накопителя";
+            if (lower.StartsWith("temperature #")) return "Датчик " + name.Substring(12).Trim().TrimStart('#').Trim();
+            if (lower == "temperature") return "Температура";
+            if (lower.Contains("hot spot")) return "Горячая точка";
+            if (lower.Contains("memory junction")) return "Память видеокарты";
+            if (lower == "gpu core") return "Ядро видеокарты";
+            return name;
         }
 
         private static bool IsThreshold(string name)
@@ -315,7 +395,7 @@ namespace DiskMasterSensors
                     return new Reading
                     {
                         Kind = "temperature",
-                        Name = "CPU Package (Ryzen Master SDK)",
+                        Name = "Температура процессора",
                         Hardware = "AMD Ryzen",
                         HardwareType = "Cpu",
                         Value = Math.Round(stats.Temperature, 1),

@@ -583,6 +583,23 @@ fn main() {
             }
             start_disk_watch(app.handle().clone());
 
+            // Sensors are started automatically on a normal launch. A hidden
+            // autostart run stays silent to avoid an unexpected UAC at logon.
+            if !hidden {
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(2500));
+                    let state = sensors::state();
+                    if state.available && state.pawnio_installed && !state.running {
+                        match sensors::start() {
+                            Ok(_) => logging::log("sensors: auto-started"),
+                            Err(error) => {
+                                logging::log(&format!("sensors: auto-start failed: {error}"))
+                            }
+                        }
+                    }
+                });
+            }
+
             if std::env::args().any(|value| value == "--widget") {
                 let _ = widget::launch(app.handle(), None);
             }
