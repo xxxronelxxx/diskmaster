@@ -18,6 +18,7 @@ mod scan;
 mod schedule;
 mod sensors;
 mod settings;
+mod smart;
 mod startup;
 mod state;
 mod system;
@@ -748,6 +749,7 @@ fn main() {
             commands::sensors_start,
             commands::sensors_stop,
             commands::sensors_install,
+            commands::smart_read,
             commands::initial_tab,
             set_locale,
             commands::maintenance_status,

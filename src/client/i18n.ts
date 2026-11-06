@@ -175,6 +175,9 @@ const OVERRIDES: Record<string, string> = {
   "без прав администратора": "standard user",
   "свободно {size}": "{size} free",
   "Проверить уведомление": "Test notification",
+  "Прочитать SMART (UAC)": "Read SMART (UAC)",
+  "SMART: критическое предупреждение (0x{code})": "SMART: critical warning (0x{code})",
+  " · ошибок {value}": " · errors {value}",
 };
 
 const EN: Record<string, string> = { ...EN_TRANSLATIONS, ...OVERRIDES };

@@ -1,6 +1,6 @@
 [package]
 name = "disk-master"
-version = "1.8.1"
+version = "1.9.0"
 description = "Очистка диска, анализ места и мониторинг Windows"
 authors = ["Development SPB"]
 edition = "2021"
@@ -36,6 +36,7 @@ windows-sys = { version = "0.59", features = [
   "Win32_System_Restore",
   "Win32_System_Registry",
   "Win32_System_Threading",
+  "Win32_System_IO",
 ] }
 chrono = "0.4"
 wait-timeout = "0.2"

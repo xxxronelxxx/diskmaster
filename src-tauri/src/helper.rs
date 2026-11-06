@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
+mod smart;
 mod wmi_time;
 
 use serde::{Deserialize, Serialize};
@@ -49,6 +50,7 @@ fn main() {
         "restore_points_list" => restore_points_list(),
         "restore_point_delete" => restore_point_delete(&payload),
         "clean_system" => clean_system(&payload),
+        "smart" => smart_result(),
         _ => Output {
             ok: false,
             message: format!("Неизвестная операция: {operation}"),
@@ -64,6 +66,14 @@ fn main() {
     // Exit explicitly: COM/WMI teardown during process shutdown can block after
     // a successful query, which would leave the main app waiting forever.
     std::process::exit(if result.ok { 0 } else { 1 });
+}
+
+fn smart_result() -> Output {
+    let disks = smart::read_all();
+    ok(
+        format!("SMART: дисков — {}", disks.len()),
+        serde_json::to_value(disks).unwrap_or(Value::Null),
+    )
 }
 
 fn ok(message: impl Into<String>, data: Value) -> Output {

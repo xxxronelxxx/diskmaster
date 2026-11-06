@@ -377,6 +377,30 @@ export type DiskHealth = {
   powerOnHours: number | null;
   readErrors: number | null;
   writeErrors: number | null;
+  smart: boolean;
+  mediaErrors: number | null;
+  errorLogEntries: number | null;
+  criticalWarning: number | null;
+  availableSpare: number | null;
+  unsafeShutdowns: number | null;
+};
+
+export type SmartDisk = {
+  index: number;
+  model: string;
+  serial: string;
+  busType: number;
+  criticalWarning: number;
+  temperature: number | null;
+  availableSpare: number | null;
+  spareThreshold: number | null;
+  wear: number | null;
+  powerOnHours: number | null;
+  unsafeShutdowns: number | null;
+  mediaErrors: number | null;
+  errorLogEntries: number | null;
+  dataRead: number | null;
+  dataWritten: number | null;
 };
 
 export type SensorInfo = {

@@ -7,6 +7,7 @@ use crate::clean_history::CleanHistoryEntry;
 use crate::maintenance::{self, MaintenanceStatus};
 use crate::sensors::{self, SensorsState};
 use crate::settings::AppSettings;
+use crate::smart::SmartDisk;
 use crate::state::AppState;
 use crate::types::*;
 use crate::{
@@ -440,6 +441,23 @@ pub async fn sensors_install() -> CmdResult<SensorsState> {
 #[tauri::command]
 pub async fn sensors_stop() -> CmdResult<SensorsState> {
     blocking(sensors::stop).await
+}
+
+#[tauri::command]
+pub async fn smart_read() -> CmdResult<Vec<SmartDisk>> {
+    blocking(|| {
+        if crate::smart::is_elevated() {
+            return Ok(crate::smart::read_all());
+        }
+        let response = crate::elevated::run("smart", serde_json::json!({}))?;
+        let data = response
+            .get("data")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let disks = serde_json::from_value::<Vec<SmartDisk>>(data).unwrap_or_default();
+        Ok(disks)
+    })
+    .await?
 }
 
 #[tauri::command]

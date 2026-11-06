@@ -17,6 +17,12 @@ pub struct DiskHealth {
     pub power_on_hours: Option<u64>,
     pub read_errors: Option<u64>,
     pub write_errors: Option<u64>,
+    pub smart: bool,
+    pub media_errors: Option<u64>,
+    pub error_log_entries: Option<u64>,
+    pub critical_warning: Option<u8>,
+    pub available_spare: Option<u8>,
+    pub unsafe_shutdowns: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -109,6 +115,7 @@ fn connection(namespace: &str) -> Option<wmi::WMIConnection> {
 }
 
 fn disks() -> Vec<DiskHealth> {
+    let smart_disks = crate::smart::read_all();
     let Some(wmi) = connection("ROOT\\Microsoft\\Windows\\Storage") else {
         return Vec::new();
     };
@@ -131,6 +138,11 @@ fn disks() -> Vec<DiskHealth> {
             let counter = reliability
                 .iter()
                 .find(|item| item.device_id.as_deref() == Some(device_id.as_str()));
+            let smart = smart_disks.iter().find(|item| {
+                item.index.to_string() == device_id
+                    || (!item.serial.is_empty()
+                        && disk.serial.as_deref() == Some(item.serial.as_str()))
+            });
 
             DiskHealth {
                 device_id,
@@ -140,11 +152,23 @@ fn disks() -> Vec<DiskHealth> {
                 health: disk.health,
                 operational: disk.operational.unwrap_or_default(),
                 serial: disk.serial,
-                temperature: counter.and_then(|item| item.temperature),
-                wear: counter.and_then(|item| item.wear),
-                power_on_hours: counter.and_then(|item| item.power_on_hours),
+                temperature: counter
+                    .and_then(|item| item.temperature)
+                    .or_else(|| smart.and_then(|item| item.temperature)),
+                wear: counter
+                    .and_then(|item| item.wear)
+                    .or_else(|| smart.and_then(|item| item.wear)),
+                power_on_hours: counter
+                    .and_then(|item| item.power_on_hours)
+                    .or_else(|| smart.and_then(|item| item.power_on_hours)),
                 read_errors: counter.and_then(|item| item.read_errors),
                 write_errors: counter.and_then(|item| item.write_errors),
+                smart: smart.is_some(),
+                media_errors: smart.and_then(|item| item.media_errors),
+                error_log_entries: smart.and_then(|item| item.error_log_entries),
+                critical_warning: smart.map(|item| item.critical_warning),
+                available_spare: smart.and_then(|item| item.available_spare),
+                unsafe_shutdowns: smart.and_then(|item| item.unsafe_shutdowns),
             }
         })
         .collect()

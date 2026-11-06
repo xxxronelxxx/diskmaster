@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/client/api";
 import { queryClient } from "@/client/rpc-client";
-import type { MaintenanceStatus } from "@/shared/types";
+import type { MaintenanceStatus, SmartDisk } from "@/shared/types";
 import { formatBytes, formatDate } from "@/client/lib/format";
 import { Badge, Button, Card, EmptyState, Modal, SectionTitle } from "./ui";
 import { SensorsPanel } from "./sensors-panel";
@@ -46,11 +46,24 @@ export function MaintenanceTab() {
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [categories, setCategories] = useState<string[]>(["win-temp"]);
+  const [smartDisks, setSmartDisks] = useState<SmartDisk[] | null>(null);
   const [loadedPoints, setLoadedPoints] = useState<MaintenanceStatus["restorePoints"] | null>(null);
 
   const operation = useMutation({
     mutationFn: (input: { op: string; payload?: unknown }) => api.systemOperation(input),
   });
+  const smartMutation = useMutation({
+    mutationFn: () => api.smartRead(),
+  });
+
+  async function readSmart() {
+    setError(null);
+    try {
+      setSmartDisks(await smartMutation.mutateAsync());
+    } catch (cause) {
+      setError(translateError(cause));
+    }
+  }
 
   async function runPending() {
     if (!pending) return;
@@ -71,6 +84,7 @@ export function MaintenanceTab() {
   }
 
   const helperMissing = status && !status.helperAvailable;
+  const smartLoaded = Boolean(smartDisks?.length) || Boolean(status?.disks.some((disk) => disk.smart));
   const points = loadedPoints ?? status?.restorePoints ?? [];
   const oldest = points.reduce(
     (best, point) => (best === null || point.sequence < best.sequence ? point : best),
@@ -131,11 +145,57 @@ export function MaintenanceTab() {
               <p className="text-sm font-medium text-white">{t("Здоровье дисков")}</p>
             </div>
             {!status?.disks.length ? (
-              <p className="text-xs text-slate-500">{t("Нет данных SMART/WMI.")}</p>
+              smartDisks?.length ? (
+                <div className="space-y-2">
+                  {smartDisks.map((disk) => (
+                    <div key={disk.index} className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-2.5">
+                      <p className="truncate text-xs font-medium text-slate-100">
+                        {disk.model || t("NVMe-диск {index}", { index: disk.index })}
+                      </p>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        {t("NVMe")} · {formatBytes(disk.dataWritten ?? 0, 0)} {t("записано")}
+                        {disk.temperature !== null ? t(" · {value} °C", { value: disk.temperature }) : ""}
+                        {disk.wear !== null ? t(" · износ {value}%", { value: disk.wear }) : ""}
+                        {disk.powerOnHours !== null ? t(" · {value} ч", { value: disk.powerOnHours }) : ""}
+                        {(disk.mediaErrors ?? 0) > 0 ? t(" · ошибок {value}", { value: disk.mediaErrors ?? 0 }) : ""}
+                      </p>
+                      {disk.criticalWarning > 0 ? (
+                        <p className="mt-1 text-[10px] text-rose-300">
+                          {t("SMART: критическое предупреждение (0x{code})", {
+                            code: disk.criticalWarning.toString(16),
+                          })}
+                        </p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500">{t("Нет данных SMART/WMI.")}</p>
+              )
             ) : (
               <div className="space-y-2">
                 {status.disks.map((disk) => {
                   const health = healthLabel(disk.health);
+                  const smart = disk.smart
+                    ? {
+                        temperature: disk.temperature,
+                        wear: disk.wear,
+                        powerOnHours: disk.powerOnHours,
+                        criticalWarning: disk.criticalWarning ?? 0,
+                        availableSpare: disk.availableSpare,
+                        unsafeShutdowns: disk.unsafeShutdowns,
+                        mediaErrors: disk.mediaErrors,
+                      }
+                    : smartDisks?.find(
+                        (item) =>
+                          item.index === Number(disk.deviceId) ||
+                          (item.serial !== "" && item.serial === disk.serial),
+                      );
+                  const temperature = disk.temperature ?? smart?.temperature ?? null;
+                  const wear = disk.wear ?? smart?.wear ?? null;
+                  const hours = disk.powerOnHours ?? smart?.powerOnHours ?? null;
+                  const critical = smart?.criticalWarning ?? 0;
+                  const mediaErrors = smart?.mediaErrors ?? 0;
                   return (
                     <div key={disk.deviceId} className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-2.5">
                       <div className="flex items-center justify-between gap-2">
@@ -144,15 +204,40 @@ export function MaintenanceTab() {
                       </div>
                       <p className="mt-1 text-[11px] text-slate-500">
                         {mediaLabel(disk.mediaType)} · {formatBytes(disk.size, 0)}
-                        {disk.temperature !== null ? t(" · {value} °C", { value: disk.temperature }) : ""}
-                        {disk.wear !== null ? t(" · износ {value}%", { value: disk.wear }) : ""}
-                        {disk.powerOnHours !== null ? t(" · {value} ч", { value: disk.powerOnHours }) : ""}
+                        {temperature !== null ? t(" · {value} °C", { value: temperature }) : ""}
+                        {wear !== null ? t(" · износ {value}%", { value: wear }) : ""}
+                        {hours !== null ? t(" · {value} ч", { value: hours }) : ""}
+                        {mediaErrors > 0 ? t(" · ошибок {value}", { value: mediaErrors }) : ""}
                       </p>
+                      {critical > 0 ? (
+                        <p className="mt-1 text-[10px] text-rose-300">
+                          {t("SMART: критическое предупреждение (0x{code})", {
+                            code: critical.toString(16),
+                          })}
+                        </p>
+                      ) : null}
                     </div>
                   );
                 })}
               </div>
             )}
+            <div className="mt-2 space-y-2">
+              {!smartLoaded ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => void readSmart()}
+                  loading={smartMutation.isPending}
+                >
+                  {t("Прочитать SMART (UAC)")}
+                </Button>
+              ) : null}
+              {smartDisks !== null && smartDisks.length === 0 ? (
+                <p className="text-[11px] text-slate-500">
+                  {t("SMART не прочитан: NVMe-диск не найден или Windows не отдал журнал здоровья.")}
+                </p>
+              ) : null}
+            </div>
           </Card>
 
           <Card className="p-4">

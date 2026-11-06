@@ -17,6 +17,7 @@ import type {
   ScanState,
   SensorsState,
   SettingsState,
+  SmartDisk,
   ScheduleConfig,
   ScheduleRun,
   ScheduleStatus,
@@ -116,6 +117,7 @@ export const api = {
   sensorsStart: () => invoke<SensorsState>("sensors_start"),
   sensorsStop: () => invoke<SensorsState>("sensors_stop"),
   sensorsInstall: () => invoke<SensorsState>("sensors_install"),
+  smartRead: () => invoke<SmartDisk[]>("smart_read"),
 
   settingsState: () => invoke<SettingsState>("settings_state"),
   settingsSave: (input: AppSettings) => invoke<SettingsState>("settings_save", { input }),
@@ -202,6 +204,7 @@ export const queryClient = {
     sensorsStart: { mutationOptions: mutation<Record<string, never> | undefined, SensorsState>("sensors_start") },
     sensorsStop: { mutationOptions: mutation<Record<string, never> | undefined, SensorsState>("sensors_stop") },
     sensorsInstall: { mutationOptions: mutation<Record<string, never> | undefined, SensorsState>("sensors_install") },
+    smartRead: { mutationOptions: mutation<Record<string, never> | undefined, SmartDisk[]>("smart_read") },
 
     settingsState: { queryOptions: () => query<SettingsState>("settings_state") },
     settingsSave: { mutationOptions: mutation<AppSettings, SettingsState>("settings_save") },
