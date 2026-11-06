@@ -418,3 +418,28 @@ export type SettingsState = {
   portable: boolean;
   hotkeyErrors: string[];
 };
+
+/* --------------------------------- sensors -------------------------------- */
+
+export type SensorReading = {
+  kind: "temperature" | "fan" | "percent";
+  name: string;
+  hardware: string;
+  hardwareType: string;
+  value: number;
+  identifier: string;
+};
+
+export type SensorsState = {
+  available: boolean;
+  running: boolean;
+  admin: boolean;
+  pawnioInstalled: boolean;
+  pawnioVersion: string | null;
+  source: string;
+  updatedAt: string | null;
+  ageSeconds: number | null;
+  sensors: SensorReading[];
+  error: string | null;
+  needsReboot: boolean;
+};

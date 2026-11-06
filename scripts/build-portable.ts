@@ -7,6 +7,7 @@
 import { execSync } from "node:child_process";
 import {
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -34,6 +35,9 @@ execSync("pnpm build:web", { stdio: "inherit", cwd: root });
 
 log("helper");
 execSync("tsx scripts/build-helper.ts", { stdio: "inherit", cwd: root });
+
+log("sensors");
+execSync("tsx scripts/build-sensors.ts", { stdio: "inherit", cwd: root });
 
 log("release build");
 execSync("pnpm tauri build --no-bundle", { stdio: "inherit", cwd: root });
@@ -68,6 +72,11 @@ if (existsSync(helperSource)) {
   const helperDir = path.join(target, "resources");
   mkdirSync(helperDir, { recursive: true });
   copyFileSync(helperSource, path.join(helperDir, "DiskMasterHelper.exe"));
+}
+
+const sensorsSource = path.join(root, "src-tauri", "resources", "sensors");
+if (existsSync(sensorsSource)) {
+  cpSync(sensorsSource, path.join(target, "resources", "sensors"), { recursive: true });
 }
 
 writeFileSync(path.join(target, "portable.marker"), "", "utf8");

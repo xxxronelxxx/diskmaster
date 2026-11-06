@@ -15,6 +15,7 @@ mod paths;
 mod programs;
 mod scan;
 mod schedule;
+mod sensors;
 mod settings;
 mod startup;
 mod state;
@@ -475,6 +476,10 @@ fn main() {
             commands::notification_test,
             commands::process_priority,
             commands::process_suspend,
+            commands::sensors_state,
+            commands::sensors_start,
+            commands::sensors_stop,
+            commands::sensors_install,
             commands::initial_tab,
             commands::maintenance_status,
             commands::system_operation,
@@ -671,6 +676,9 @@ fn main() {
                 }
             }
             metrics::stop_global();
+            if sensors::state().running {
+                sensors::stop();
+            }
             logging::log("exit");
         }
     });

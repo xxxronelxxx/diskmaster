@@ -38,6 +38,10 @@ jobs:
           if (-not (Test-Path resources\DiskMasterHelper.exe)) {
             Set-Content -Path resources\DiskMasterHelper.exe -Value '' -NoNewline
           }
+          New-Item -ItemType Directory -Force -Path resources\sensors | Out-Null
+          if (-not (Test-Path resources\sensors\.keep)) {
+            Set-Content -Path resources\sensors\.keep -Value '' -NoNewline
+          }
           cargo build --bin DiskMasterHelper
           Copy-Item target\debug\DiskMasterHelper.exe resources\DiskMasterHelper.exe -Force
 

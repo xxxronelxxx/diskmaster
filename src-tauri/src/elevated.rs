@@ -109,3 +109,69 @@ pub fn run(operation: &str, payload: Value) -> Result<Value, String> {
         )),
     }
 }
+
+/// Launches a module with UAC elevation and returns immediately. The process
+/// keeps running after the handle is closed.
+pub fn launch_detached(exe: &std::path::Path, parameters: &str) -> Result<(), String> {
+    shell_execute(exe, parameters, false).map(|_| ())
+}
+
+fn shell_execute(exe: &std::path::Path, parameters: &str, wait: bool) -> Result<u32, String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{
+        GetExitCodeProcess, WaitForSingleObject, INFINITE,
+    };
+    use windows_sys::Win32::UI::Shell::{ShellExecuteExW, SHELLEXECUTEINFOW};
+
+    let wide = |value: &str| -> Vec<u16> {
+        std::ffi::OsStr::new(value)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
+    };
+    let verb = wide("runas");
+    let file = wide(&exe.to_string_lossy());
+    let args = wide(parameters);
+    let directory = wide(
+        &exe.parent()
+            .map(|path| path.to_string_lossy().to_string())
+            .unwrap_or_default(),
+    );
+
+    let mut info: SHELLEXECUTEINFOW = unsafe { std::mem::zeroed() };
+    info.cbSize = std::mem::size_of::<SHELLEXECUTEINFOW>() as u32;
+    info.fMask = 0x0000_0100 | 0x0000_0040; // NOASYNC | NOCLOSEPROCESS
+    info.lpVerb = verb.as_ptr();
+    info.lpFile = file.as_ptr();
+    info.lpParameters = args.as_ptr();
+    info.lpDirectory = directory.as_ptr();
+    info.nShow = 0;
+
+    let ok = unsafe { ShellExecuteExW(&mut info) };
+    if ok == 0 {
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error().unwrap_or(0) == 1223 {
+            return Err("Запрос прав администратора отменён".into());
+        }
+        return Err(format!("Не удалось запустить модуль: {error}"));
+    }
+
+    let handle = info.hProcess;
+    if handle.is_null() {
+        return Err("Модуль не вернул процесс".into());
+    }
+
+    if !wait {
+        unsafe { CloseHandle(handle) };
+        return Ok(0);
+    }
+
+    unsafe { WaitForSingleObject(handle, INFINITE) };
+    let mut exit_code: u32 = 0;
+    unsafe {
+        GetExitCodeProcess(handle, &mut exit_code);
+        CloseHandle(handle);
+    }
+    Ok(exit_code)
+}

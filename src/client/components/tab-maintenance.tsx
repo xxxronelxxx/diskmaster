@@ -5,6 +5,7 @@ import { queryClient } from "@/client/rpc-client";
 import type { MaintenanceStatus } from "@/shared/types";
 import { formatBytes, formatDate } from "@/client/lib/format";
 import { Badge, Button, Card, EmptyState, Modal, SectionTitle } from "./ui";
+import { SensorsPanel } from "./sensors-panel";
 import { AlertIcon, RefreshIcon, ShieldIcon, TrashIcon } from "./icons";
 
 type Pending = {
@@ -153,31 +154,7 @@ export function MaintenanceTab() {
           )}
         </Card>
 
-        <Card className="p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <ShieldIcon className="size-4 text-sky-300" />
-            <p className="text-sm font-medium text-white">Температуры и кулеры</p>
-          </div>
-          {!status?.sensors.length ? (
-            <p className="text-xs text-slate-500">
-              Датчики CPU/GPU доступны только при запущенном LibreHardwareMonitor
-              (WMI-источник). Температура дисков показана выше, если её отдаёт WMI.
-            </p>
-          ) : (
-            <div className="max-h-48 space-y-1 overflow-auto">
-              {status.sensors.map((sensor, index) => (
-                <div key={`${sensor.identifier ?? sensor.name}-${index}`} className="flex items-center justify-between gap-2 text-[11px]">
-                  <span className="truncate text-slate-300">{sensor.name}</span>
-                  <span className="tabular-nums text-slate-400">
-                    {sensor.sensorType === "Fan"
-                      ? `${Math.round(sensor.value)} об/мин`
-                      : `${sensor.value.toFixed(1)} °C`}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
+        <SensorsPanel wmiSensors={status?.sensors ?? []} />
 
         <Card className="p-4">
           <p className="text-sm font-medium text-white">Windows.old</p>

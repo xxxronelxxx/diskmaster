@@ -5,6 +5,7 @@ use tauri::{Manager, State};
 
 use crate::clean_history::CleanHistoryEntry;
 use crate::maintenance::{self, MaintenanceStatus};
+use crate::sensors::{self, SensorsState};
 use crate::settings::AppSettings;
 use crate::state::AppState;
 use crate::types::*;
@@ -352,6 +353,26 @@ pub fn autostart_set(input: AutostartInput) -> OkResult {
         ok: true,
         error: None,
     }
+}
+
+#[tauri::command]
+pub fn sensors_state() -> SensorsState {
+    sensors::state()
+}
+
+#[tauri::command]
+pub async fn sensors_start() -> CmdResult<SensorsState> {
+    blocking(sensors::start).await?
+}
+
+#[tauri::command]
+pub async fn sensors_install() -> CmdResult<SensorsState> {
+    blocking(sensors::install).await?
+}
+
+#[tauri::command]
+pub async fn sensors_stop() -> CmdResult<SensorsState> {
+    blocking(sensors::stop).await
 }
 
 #[tauri::command]

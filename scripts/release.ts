@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { zipSync } from "fflate";
 import {
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -64,6 +65,7 @@ const run = (command: string) => execSync(command, { stdio: "inherit", cwd: root
 
 run("pnpm version:sync");
 run("tsx scripts/build-helper.ts");
+run("tsx scripts/build-sensors.ts");
 run("pnpm tauri build");
 
 const bundleDir = path.join(root, "src-tauri", "target", "release", "bundle", "nsis");
@@ -106,6 +108,10 @@ if (existsSync(helperSource)) {
   mkdirSync(helperDir, { recursive: true });
   copyFileSync(helperSource, path.join(helperDir, "DiskMasterHelper.exe"));
 }
+const sensorsSource = path.join(root, "src-tauri", "resources", "sensors");
+if (existsSync(sensorsSource)) {
+  cpSync(sensorsSource, path.join(portableDir, "resources", "sensors"), { recursive: true });
+}
 writeFileSync(path.join(portableDir, "portable.marker"), "", "utf8");
 writeFileSync(
   path.join(portableDir, "README.txt"),
@@ -127,20 +133,33 @@ writeFileSync(
 
 const portableZip = path.join(outputDir, `DiskMaster-portable-${version}.zip`);
 rmSync(portableZip, { force: true });
-writeFileSync(
-  portableZip,
-  zipSync(
-    {
-      "DiskMaster.exe": readFileSync(path.join(portableDir, "DiskMaster.exe")),
-      "resources/DiskMasterHelper.exe": readFileSync(
-        path.join(portableDir, "resources", "DiskMasterHelper.exe"),
-      ),
-      "README.txt": readFileSync(path.join(portableDir, "README.txt")),
-      "portable.marker": new Uint8Array(),
-    },
-    { level: 6 },
+const zipEntries: Record<string, Uint8Array> = {
+  "DiskMaster.exe": readFileSync(path.join(portableDir, "DiskMaster.exe")),
+  "resources/DiskMasterHelper.exe": readFileSync(
+    path.join(portableDir, "resources", "DiskMasterHelper.exe"),
   ),
-);
+  "README.txt": readFileSync(path.join(portableDir, "README.txt")),
+  "portable.marker": new Uint8Array(),
+};
+
+function addDirectory(source: string, prefix: string): void {
+  for (const entry of readdirSync(source, { withFileTypes: true })) {
+    const full = path.join(source, entry.name);
+    const name = `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) {
+      addDirectory(full, name);
+    } else {
+      zipEntries[name] = readFileSync(full);
+    }
+  }
+}
+
+const sensorsDir = path.join(portableDir, "resources", "sensors");
+if (existsSync(sensorsDir)) {
+  addDirectory(sensorsDir, "resources/sensors");
+}
+
+writeFileSync(portableZip, zipSync(zipEntries, { level: 6 }));
 
 const sha256 = (file: string) =>
   createHash("sha256").update(readFileSync(file)).digest("hex");

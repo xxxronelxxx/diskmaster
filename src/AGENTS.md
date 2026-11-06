@@ -35,6 +35,10 @@ cd src-tauri && cargo clippy -- -D warnings
   PowerShell for these paths.
 - The elevated helper is a separate binary (`src/helper.rs`). Its operations are
   a fixed allow-list; never accept raw shell commands or arbitrary paths.
+- The sensor module is a separate managed host (`sensors/`, net472 x64). It is
+  built by `scripts/build-sensors.ts` into `src-tauri/resources/sensors/`
+  (gitignored) and launched elevated only on demand. Never install PawnIO
+  automatically: the install is a user action with a confirmation and UAC.
 - The widget is a second Tauri window (`widget.html`) with Win32 z-order and
   click-through applied from `widget.rs`; it is not a separate process.
 - There is no PowerShell dependency anymore. Do not add PowerShell scripts or

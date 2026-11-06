@@ -24,6 +24,12 @@ spawnSync("tsx", ["scripts/build-helper.ts"], {
   shell: true,
 });
 
+spawnSync("tsx", ["scripts/build-sensors.ts"], {
+  stdio: "inherit",
+  cwd: root,
+  shell: true,
+});
+
 const sync = spawnSync("pnpm", ["version:sync"], {
   stdio: "inherit",
   cwd: root,

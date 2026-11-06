@@ -15,6 +15,7 @@ import type {
   ProcessInfo,
   RecycleResult,
   ScanState,
+  SensorsState,
   SettingsState,
   ScheduleConfig,
   ScheduleRun,
@@ -111,6 +112,11 @@ export const api = {
   processPriority: (input: { pid: number; level: string }) => invoke<{ ok: boolean; error?: string }>("process_priority", { input }),
   processSuspend: (input: { pid: number; suspend: boolean }) => invoke<{ ok: boolean; error?: string }>("process_suspend", { input }),
 
+  sensorsState: () => invoke<SensorsState>("sensors_state"),
+  sensorsStart: () => invoke<SensorsState>("sensors_start"),
+  sensorsStop: () => invoke<SensorsState>("sensors_stop"),
+  sensorsInstall: () => invoke<SensorsState>("sensors_install"),
+
   settingsState: () => invoke<SettingsState>("settings_state"),
   settingsSave: (input: AppSettings) => invoke<SettingsState>("settings_save", { input }),
   settingsExport: (path: string) => invoke<void>("settings_export", { path }),
@@ -191,6 +197,11 @@ export const queryClient = {
     widgetAutostart: { mutationOptions: mutation<{ enabled: boolean }, { ok: boolean }>("widget_autostart") },
     processPriority: { mutationOptions: mutation<{ pid: number; level: string }, { ok: boolean; error?: string }>("process_priority") },
     processSuspend: { mutationOptions: mutation<{ pid: number; suspend: boolean }, { ok: boolean; error?: string }>("process_suspend") },
+
+    sensorsState: { queryOptions: () => query<SensorsState>("sensors_state") },
+    sensorsStart: { mutationOptions: mutation<Record<string, never> | undefined, SensorsState>("sensors_start") },
+    sensorsStop: { mutationOptions: mutation<Record<string, never> | undefined, SensorsState>("sensors_stop") },
+    sensorsInstall: { mutationOptions: mutation<Record<string, never> | undefined, SensorsState>("sensors_install") },
 
     settingsState: { queryOptions: () => query<SettingsState>("settings_state") },
     settingsSave: { mutationOptions: mutation<AppSettings, SettingsState>("settings_save") },

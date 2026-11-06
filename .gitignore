@@ -34,6 +34,7 @@ output/
 src-tauri/target/
 src-tauri/gen/
 src-tauri/resources/DiskMasterHelper.exe
+src-tauri/resources/sensors/
 
 # Updater / signing artifacts
 *.sig
@@ -68,3 +69,7 @@ etilqs_*
 
 # Sandbox test workspace
 .sandbox/
+
+# .NET sensor module
+sensors/bin/
+sensors/obj/

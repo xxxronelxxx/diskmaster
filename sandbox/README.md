@@ -26,6 +26,7 @@ machine.
 | `test-ui3.wsb` + `ui3.ps1` | Settings, notification test, process priority/suspend, dry run, global hotkeys |
 | `test-hotkey.wsb` + `hotkey.ps1` | Minimizes the window and checks `Ctrl+Alt+D` / `Ctrl+Alt+W` |
 | `test-install.wsb` + `install-test.ps1` | Silent NSIS install, helper placement, Start Menu shortcut, toast |
+| `test-ui4.wsb` + `ui4.ps1` | Installs the app, presses «Установить и включить», installs PawnIO, checks the sensor service and stop |
 
 ## Run
 
