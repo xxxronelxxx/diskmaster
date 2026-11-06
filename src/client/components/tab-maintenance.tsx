@@ -42,7 +42,9 @@ export function MaintenanceTab() {
   const status = statusQuery.data as MaintenanceStatus | undefined;
   const [pending, setPending] = useState<Pending | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [categories, setCategories] = useState<string[]>(["win-temp"]);
+  const [loadedPoints, setLoadedPoints] = useState<MaintenanceStatus["restorePoints"] | null>(null);
 
   const operation = useMutation({
     mutationFn: (input: { op: string; payload?: unknown }) => api.systemOperation(input),
@@ -50,17 +52,41 @@ export function MaintenanceTab() {
 
   async function runPending() {
     if (!pending) return;
-    const response = await operation.mutateAsync({ op: pending.op, payload: pending.payload });
-    setResult(response.message);
-    setPending(null);
-    await statusQuery.refetch();
+    setError(null);
+    try {
+      const response = await operation.mutateAsync({ op: pending.op, payload: pending.payload });
+      setResult(response.message);
+      setPending(null);
+      if (pending.op === "restore_point_delete" && loadedPoints) {
+        const sequence = (pending.payload as { sequence?: number } | undefined)?.sequence;
+        setLoadedPoints(loadedPoints.filter((point) => point.sequence !== sequence));
+      }
+      await statusQuery.refetch();
+    } catch (error) {
+      setResult(null);
+      setError(error instanceof Error ? error.message : String(error));
+    }
   }
 
   const helperMissing = status && !status.helperAvailable;
-  const oldest = status?.restorePoints.reduce(
+  const points = loadedPoints ?? status?.restorePoints ?? [];
+  const oldest = points.reduce(
     (best, point) => (best === null || point.sequence < best.sequence ? point : best),
     null as { sequence: number } | null,
   );
+
+  async function loadRestorePoints() {
+    setError(null);
+    try {
+      const response = await operation.mutateAsync({ op: "restore_points_list" });
+      const data = response.data as MaintenanceStatus["restorePoints"];
+      setLoadedPoints(Array.isArray(data) ? data : []);
+      setResult(response.message);
+    } catch (error) {
+      setResult(null);
+      setError(error instanceof Error ? error.message : String(error));
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -87,6 +113,12 @@ export function MaintenanceTab() {
       {result ? (
         <Card className="border-emerald-400/25 bg-emerald-500/[0.07] p-3.5">
           <p className="text-xs text-emerald-100">{result}</p>
+        </Card>
+      ) : null}
+
+      {error ? (
+        <Card className="border-rose-400/25 bg-rose-500/[0.07] p-3.5">
+          <p className="text-xs text-rose-100">{error}</p>
         </Card>
       ) : null}
 
@@ -195,9 +227,9 @@ export function MaintenanceTab() {
 
         <Card className="p-4">
           <p className="text-sm font-medium text-white">Точки восстановления</p>
-          {status?.restorePoints.length ? (
+          {points.length ? (
             <div className="mt-2 max-h-40 space-y-1 overflow-auto">
-              {status.restorePoints.map((point) => (
+              {points.map((point) => (
                 <div key={point.sequence} className="flex items-center justify-between gap-2 text-[11px]">
                   <span className="truncate text-slate-300">{point.description ?? `Точка ${point.sequence}`}</span>
                   <span className="shrink-0 text-slate-500">{point.createdAt ? formatDate(point.createdAt) : ""}</span>
@@ -208,6 +240,14 @@ export function MaintenanceTab() {
             <p className="mt-2 text-[11px] text-slate-500">Точки восстановления не найдены.</p>
           )}
           <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void loadRestorePoints()}
+              loading={operation.isPending}
+            >
+              Загрузить список (UAC)
+            </Button>
             <Button
               size="sm"
               variant="secondary"
