@@ -298,6 +298,9 @@ pub fn start_scan(shared: &AppState, threshold_mb: Option<f64>) -> ScanState {
         }
     }
 
+    // A new scan invalidates paths from the previous one.
+    shared.allow.lock().unwrap().clear();
+
     let threshold = ((threshold_mb.unwrap_or(200.0) as u64) * MB).max(LARGE_FILE_THRESHOLD_MIN);
     let definitions = categories();
     let mut categories_out = Vec::with_capacity(definitions.len());

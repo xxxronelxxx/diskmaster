@@ -159,17 +159,21 @@ fn default_position(app: &AppHandle, settings: &WidgetSettings) -> PhysicalPosit
     PhysicalPosition::new(24, 24)
 }
 
-pub fn apply(app: &AppHandle, settings: &WidgetSettings) {
+pub fn apply(app: &AppHandle, settings: &WidgetSettings, geometry: bool) {
     let Some(window) = app.get_webview_window("widget") else {
         return;
     };
-    let _ = window.set_size(PhysicalSize::new(settings.width, settings.height));
-    let position = if settings.x >= 0 && settings.y >= 0 {
-        PhysicalPosition::new(settings.x, settings.y)
-    } else {
-        default_position(app, settings)
-    };
-    let _ = window.set_position(position);
+
+    if geometry {
+        let _ = window.set_size(PhysicalSize::new(settings.width, settings.height));
+        let position = if settings.x >= 0 && settings.y >= 0 {
+            PhysicalPosition::new(settings.x, settings.y)
+        } else {
+            default_position(app, settings)
+        };
+        let _ = window.set_position(position);
+    }
+
     let _ = window.set_always_on_top(settings.z_mode == "top");
     apply_native_style(&window, settings);
 }
@@ -182,7 +186,7 @@ pub fn launch(app: &AppHandle, patch: Option<Value>) -> (bool, Option<String>) {
 
     if let Some(window) = app.get_webview_window("widget") {
         let _ = window.show();
-        apply(app, &settings);
+        apply(app, &settings, true);
         return (true, None);
     }
 
@@ -212,7 +216,9 @@ pub fn launch(app: &AppHandle, patch: Option<Value>) -> (bool, Option<String>) {
 
 pub fn stop(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("widget") {
-        let _ = window.hide();
+        // Destroy instead of hide: a hidden WebView keeps polling metrics and
+        // holds a full Chromium renderer in memory.
+        let _ = window.destroy();
     }
 }
 

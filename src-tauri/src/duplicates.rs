@@ -131,6 +131,9 @@ pub fn scan_duplicates(
     let min_size = ((min_size_kb.unwrap_or(64.0).max(1.0) as u64) * 1024).max(1024);
     let deadline = started + Duration::from_secs(45);
 
+    // Paths from the previous scan must not stay deletable.
+    shared.allow.lock().unwrap().clear();
+
     let cancel = {
         let mut state = shared.duplicates.lock().unwrap();
         state.cancel.store(false, Ordering::SeqCst);

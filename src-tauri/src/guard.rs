@@ -74,11 +74,17 @@ impl AllowList {
     }
 
     pub fn register(&mut self, path: &Path) {
+        if self.paths.len() >= 100_000 {
+            self.paths.clear();
+        }
         self.paths.insert(normalize(path));
         self.touch();
     }
 
     pub fn register_many<'a, I: IntoIterator<Item = &'a PathBuf>>(&mut self, paths: I) {
+        if self.paths.len() >= 100_000 {
+            self.paths.clear();
+        }
         for path in paths {
             self.paths.insert(normalize(path));
         }

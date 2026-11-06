@@ -5,7 +5,7 @@
  * artifacts are signed as usual. Without a key the installer is still built,
  * just without the updater package, so local builds do not fail.
  */
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -17,6 +17,8 @@ const key =
 
 const env = { ...process.env };
 const args = ["tauri", "build"];
+
+execFileSync("pnpm", ["version:sync"], { stdio: "inherit", cwd: root });
 
 if (existsSync(key)) {
   env.TAURI_SIGNING_PRIVATE_KEY = key;

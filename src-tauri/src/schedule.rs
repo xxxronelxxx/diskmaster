@@ -241,8 +241,8 @@ pub fn run_now() -> CleanResult {
 
 /// Headless entry point used by `--run-scheduled-clean` and by the scheduled
 /// task itself.
-pub fn scheduled_clean(input: &[String]) -> CleanResult {
-    let config = read_config();
+pub fn scheduled_clean(input: &[String], threshold_arg: Option<u64>) -> CleanResult {
+    let mut config = read_config();
     let mut categories = valid_categories(input);
     if categories.is_empty() {
         categories = valid_categories(&config.categories);
@@ -256,17 +256,22 @@ pub fn scheduled_clean(input: &[String]) -> CleanResult {
         };
     }
 
-    let threshold_bytes = config.threshold_mb.saturating_mul(1024 * 1024);
+    let threshold_mb = threshold_arg.unwrap_or(config.threshold_mb);
+    let threshold_bytes = threshold_mb.saturating_mul(1024 * 1024);
     if threshold_bytes > 0 {
         let available = crate::scan::estimate_bytes(&categories);
         if available < threshold_bytes {
+            let at = chrono::Utc::now().timestamp_millis();
             append_run(&ScheduleRun {
-                at: chrono::Utc::now().timestamp_millis(),
+                at,
                 freed_bytes: 0,
                 files: 0,
                 categories: categories.clone(),
                 trigger: "scheduled".into(),
             });
+            config.last_run_at = Some(at);
+            config.last_freed_bytes = Some(0);
+            let _ = write_config(&config);
             crate::logging::log(&format!(
                 "scheduled clean skipped: {available} bytes below threshold {threshold_bytes}"
             ));
@@ -277,19 +282,37 @@ pub fn scheduled_clean(input: &[String]) -> CleanResult {
                 errors: vec![format!(
                     "Порог не достигнут: найдено {} МБ из {} МБ",
                     available / (1024 * 1024),
-                    config.threshold_mb
+                    threshold_mb
                 )],
             };
         }
     }
 
     let result = clean_categories(&categories);
+    let at = chrono::Utc::now().timestamp_millis();
     append_run(&ScheduleRun {
-        at: chrono::Utc::now().timestamp_millis(),
+        at,
         freed_bytes: result.freed_bytes,
         files: result.deleted_files,
         categories,
         trigger: "scheduled".into(),
     });
+
+    config.last_run_at = Some(at);
+    config.last_freed_bytes = Some(result.freed_bytes);
+    let _ = write_config(&config);
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_schedule_never_cleans_the_recycle_bin() {
+        assert!(!DEFAULT_SCHEDULE
+            .categories
+            .iter()
+            .any(|id| id == "recycle-bin"));
+    }
 }

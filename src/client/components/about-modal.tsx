@@ -59,13 +59,13 @@ export function AboutModal({
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button size="sm" variant="secondary" onClick={() => void invoke("open_url", { url: REPO })}>
+        <Button size="sm" variant="secondary" onClick={() => void invoke("open_url", { url: REPO }).catch(() => undefined)}>
           GitHub
         </Button>
-        <Button size="sm" variant="secondary" onClick={() => void invoke("open_releases")}>
+        <Button size="sm" variant="secondary" onClick={() => void invoke("open_releases").catch(() => undefined)}>
           Релизы
         </Button>
-        <Button size="sm" variant="secondary" onClick={() => void invoke("open_logs")}>
+        <Button size="sm" variant="secondary" onClick={() => void invoke("open_logs").catch(() => undefined)}>
           Открыть журнал
         </Button>
         <Button size="sm" variant="secondary" onClick={() => void copyDiagnostics()}>

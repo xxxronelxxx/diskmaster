@@ -247,8 +247,9 @@ fn run_headless_clean() {
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .collect();
+    let threshold = arg_value("threshold").and_then(|value| value.parse::<u64>().ok());
 
-    let _ = schedule::scheduled_clean(&categories);
+    let _ = schedule::scheduled_clean(&categories, threshold);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -271,8 +272,15 @@ fn main() {
     }
 
     let builder = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            show_main(app);
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            let wants_widget = argv.iter().any(|value| value == "--widget");
+            let hidden = argv.iter().any(|value| value == "--hidden");
+
+            if wants_widget {
+                let _ = widget::launch(app, None);
+            } else if !hidden {
+                show_main(app);
+            }
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
@@ -397,9 +405,14 @@ fn main() {
         .on_window_event(|window, event| {
             if window.label() == "widget" {
                 match event {
-                    WindowEvent::CloseRequested { api, .. } => {
-                        api.prevent_close();
-                        let _ = window.hide();
+                    WindowEvent::CloseRequested { .. } => {
+                        if let (Ok(position), Ok(size)) =
+                            (window.outer_position(), window.inner_size())
+                        {
+                            widget::remember_geometry(position, size);
+                        }
+                        // Let the window close and destroy its WebView; the
+                        // widget is recreated on the next launch.
                     }
                     WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
                         let now = chrono::Utc::now().timestamp_millis();

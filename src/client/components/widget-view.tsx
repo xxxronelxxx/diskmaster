@@ -67,14 +67,15 @@ export function WidgetView() {
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     const tick = async () => {
+      let interval = 1500;
       try {
         const next = await invoke<WidgetData>("widget_data");
         if (!cancelled) setData(next);
+        interval = next.settings.intervalMs;
       } catch {
         /* app is closing */
       }
       if (!cancelled) {
-        const interval = data?.settings.intervalMs ?? 1500;
         timer = setTimeout(tick, Math.max(500, interval));
       }
     };
@@ -84,7 +85,6 @@ export function WidgetView() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -215,7 +215,10 @@ export function WidgetView() {
       {menu ? (
         <div
           className="absolute z-10 w-48 overflow-hidden rounded-lg border border-white/10 bg-[#101725] py-1 text-[12px] shadow-xl"
-          style={{ left: Math.min(menu.x, 40), top: Math.min(menu.y, 60) }}
+          style={{
+            left: Math.max(4, Math.min(menu.x, window.innerWidth - 200)),
+            top: Math.max(4, Math.min(menu.y, window.innerHeight - 120)),
+          }}
         >
           <button className="block w-full px-3 py-1.5 text-left text-slate-200 hover:bg-white/10" onClick={() => void action("widget_hide")}>
             Скрыть виджет

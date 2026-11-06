@@ -26,6 +26,9 @@ const exeCandidates = [
 
 const log = (text: string) => console.log(`\n[portable] ${text}`);
 
+log("version");
+execSync("pnpm version:sync", { stdio: "inherit", cwd: root });
+
 log("interface");
 execSync("pnpm build:web", { stdio: "inherit", cwd: root });
 

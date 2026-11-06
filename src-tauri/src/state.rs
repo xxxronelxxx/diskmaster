@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -22,6 +23,7 @@ pub struct AppState {
     pub duplicates: Arc<Mutex<DuplicateState>>,
     pub programs: Arc<Mutex<Option<ProgramCache>>>,
     pub updates: Arc<Mutex<Option<UpdateCache>>>,
+    pub startup_ids: Arc<Mutex<HashSet<String>>>,
 }
 
 impl AppState {
@@ -32,6 +34,7 @@ impl AppState {
             duplicates: Arc::new(Mutex::new(DuplicateState::default())),
             programs: Arc::new(Mutex::new(None)),
             updates: Arc::new(Mutex::new(None)),
+            startup_ids: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 }

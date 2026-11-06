@@ -410,8 +410,16 @@ pub async fn upgrade_all(state: State<'_, AppState>) -> CmdResult<OutputResult> 
 /* --------------------------------- startup -------------------------------- */
 
 #[tauri::command]
-pub async fn startup_list() -> CmdResult<Vec<StartupItem>> {
-    blocking(startup::list).await
+pub async fn startup_list(state: State<'_, AppState>) -> CmdResult<Vec<StartupItem>> {
+    let shared = state.inner().clone();
+    blocking(move || {
+        let items = startup::list();
+        let mut ids = shared.startup_ids.lock().unwrap();
+        ids.clear();
+        ids.extend(items.iter().map(|item| item.id.clone()));
+        items
+    })
+    .await
 }
 
 #[derive(Deserialize)]
@@ -422,7 +430,13 @@ pub struct ToggleInput {
 }
 
 #[tauri::command]
-pub async fn startup_toggle(input: ToggleInput) -> CmdResult<OkResult> {
+pub async fn startup_toggle(state: State<'_, AppState>, input: ToggleInput) -> CmdResult<OkResult> {
+    if !state.startup_ids.lock().unwrap().contains(&input.id) {
+        return Ok(OkResult {
+            ok: false,
+            error: Some("Элемент не найден в текущем списке автозагрузки".into()),
+        });
+    }
     blocking(move || {
         let (ok, error) = startup::toggle(&input.id, input.enabled);
         OkResult { ok, error }
@@ -436,7 +450,16 @@ pub struct StartupIdInput {
 }
 
 #[tauri::command]
-pub async fn startup_delete(input: StartupIdInput) -> CmdResult<OkResult> {
+pub async fn startup_delete(
+    state: State<'_, AppState>,
+    input: StartupIdInput,
+) -> CmdResult<OkResult> {
+    if !state.startup_ids.lock().unwrap().contains(&input.id) {
+        return Ok(OkResult {
+            ok: false,
+            error: Some("Элемент не найден в текущем списке автозагрузки".into()),
+        });
+    }
     blocking(move || {
         let (ok, error) = startup::delete(&input.id);
         OkResult { ok, error }
@@ -565,7 +588,10 @@ pub async fn widget_save(
     input: serde_json::Value,
 ) -> CmdResult<WidgetSettings> {
     let settings = widget::save_settings(&input);
-    widget::apply(&app, &settings);
+    let geometry = ["x", "y", "width", "height"]
+        .iter()
+        .any(|key| input.get(*key).is_some());
+    widget::apply(&app, &settings, geometry);
     Ok(settings)
 }
 

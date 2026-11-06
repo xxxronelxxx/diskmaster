@@ -34,6 +34,13 @@ const dryRun = args.has("--dry-run");
 const notesArgIndex = process.argv.indexOf("--notes-file");
 const notesFile = notesArgIndex > 0 ? process.argv[notesArgIndex + 1] : null;
 
+const dirty = execSync("git status --porcelain", { cwd: root, encoding: "utf8" }).trim();
+if (dirty && !process.argv.includes("--allow-dirty")) {
+  throw new Error(
+    "Рабочее дерево содержит незакоммиченные изменения. Закоммитьте их или запустите с --allow-dirty.",
+  );
+}
+
 const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as {
   version: string;
 };

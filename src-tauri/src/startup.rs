@@ -325,8 +325,12 @@ fn split_id(id: &str) -> (String, Vec<String>) {
 
 fn write_approved(hive: Hive, section: &str, name: &str, enabled: bool) -> bool {
     let root = hive.key();
-    let Ok(key) = root.open_subkey_with_flags(section, KEY_READ | KEY_WRITE) else {
-        return false;
+    let key = match root.open_subkey_with_flags(section, KEY_READ | KEY_WRITE) {
+        Ok(key) => key,
+        Err(_) => match root.create_subkey(section) {
+            Ok((key, _)) => key,
+            Err(_) => return false,
+        },
     };
     let bytes = if enabled {
         vec![2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -379,7 +383,11 @@ pub fn toggle(id: &str, enabled: bool) -> (bool, Option<String>) {
         "folder" => {
             let target = rest.join("|");
             let file_name = target.rsplit(['\\', '/']).next().unwrap_or_default();
-            let hive = if target.to_uppercase().starts_with("HKLM") {
+            let programdata = std::env::var_os("PROGRAMDATA")
+                .map(|value| value.to_string_lossy().to_lowercase())
+                .unwrap_or_default();
+            let hive = if !programdata.is_empty() && target.to_lowercase().starts_with(&programdata)
+            {
                 Hive::LocalMachine
             } else {
                 Hive::CurrentUser
