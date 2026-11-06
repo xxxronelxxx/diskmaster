@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::elevated;
+use crate::smart::SmartWarning;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,10 +19,15 @@ pub struct DiskHealth {
     pub read_errors: Option<u64>,
     pub write_errors: Option<u64>,
     pub smart: bool,
+    pub bus_type: Option<u16>,
+    pub warnings: Vec<SmartWarning>,
+    pub data_read: Option<u64>,
+    pub data_written: Option<u64>,
     pub media_errors: Option<u64>,
     pub error_log_entries: Option<u64>,
     pub critical_warning: Option<u8>,
     pub available_spare: Option<u8>,
+    pub spare_threshold: Option<u8>,
     pub unsafe_shutdowns: Option<u64>,
 }
 
@@ -50,6 +56,7 @@ pub struct MaintenanceStatus {
     pub sensors: Vec<SensorInfo>,
     pub restore_points: Vec<RestorePoint>,
     pub helper_available: bool,
+    pub elevated: bool,
 }
 
 #[derive(Deserialize)]
@@ -68,6 +75,8 @@ struct RawDisk {
     operational: Option<Vec<u16>>,
     #[serde(rename = "SerialNumber")]
     serial: Option<String>,
+    #[serde(rename = "BusType")]
+    bus_type: Option<u16>,
 }
 
 #[derive(Deserialize)]
@@ -122,7 +131,7 @@ fn disks() -> Vec<DiskHealth> {
 
     let raw: Vec<RawDisk> = wmi
         .raw_query(
-            "SELECT DeviceId, FriendlyName, MediaType, Size, HealthStatus, OperationalStatus, SerialNumber FROM MSFT_PhysicalDisk",
+            "SELECT DeviceId, FriendlyName, MediaType, Size, HealthStatus, OperationalStatus, SerialNumber, BusType FROM MSFT_PhysicalDisk",
         )
         .unwrap_or_default();
 
@@ -164,10 +173,15 @@ fn disks() -> Vec<DiskHealth> {
                 read_errors: counter.and_then(|item| item.read_errors),
                 write_errors: counter.and_then(|item| item.write_errors),
                 smart: smart.is_some(),
+                bus_type: disk.bus_type,
+                warnings: smart.map(|item| item.warnings.clone()).unwrap_or_default(),
+                data_read: smart.and_then(|item| item.data_read),
+                data_written: smart.and_then(|item| item.data_written),
                 media_errors: smart.and_then(|item| item.media_errors),
                 error_log_entries: smart.and_then(|item| item.error_log_entries),
                 critical_warning: smart.map(|item| item.critical_warning),
                 available_spare: smart.and_then(|item| item.available_spare),
+                spare_threshold: smart.and_then(|item| item.spare_threshold),
                 unsafe_shutdowns: smart.and_then(|item| item.unsafe_shutdowns),
             }
         })
@@ -228,6 +242,7 @@ pub fn status() -> MaintenanceStatus {
         sensors: sensors(),
         restore_points: restore_points(),
         helper_available: elevated::helper_path().is_some(),
+        elevated: crate::smart::is_elevated(),
     }
 }
 

@@ -6,7 +6,7 @@
 
 use std::ffi::c_void;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use windows_sys::Win32::Foundation::{CloseHandle, GENERIC_READ, HANDLE, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
@@ -22,7 +22,36 @@ const NVME_LOG_PAGE_HEALTH: u32 = 0x02;
 const NVME_HEALTH_LOG_SIZE: usize = 512;
 const BUS_TYPE_NVME: u32 = 17;
 
-#[derive(Debug, Clone, Serialize, serde::Deserialize)]
+/// Critical Warning bits from the NVMe health log page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SmartWarning {
+    AvailableSpare,
+    Temperature,
+    Reliability,
+    ReadOnly,
+    VolatileMemory,
+    PersistentMemory,
+}
+
+impl SmartWarning {
+    fn from_mask(mask: u8) -> Vec<Self> {
+        const BITS: [(u8, SmartWarning); 6] = [
+            (1 << 0, SmartWarning::AvailableSpare),
+            (1 << 1, SmartWarning::Temperature),
+            (1 << 2, SmartWarning::Reliability),
+            (1 << 3, SmartWarning::ReadOnly),
+            (1 << 4, SmartWarning::VolatileMemory),
+            (1 << 5, SmartWarning::PersistentMemory),
+        ];
+        BITS.into_iter()
+            .filter(|(bit, _)| mask & bit != 0)
+            .map(|(_, warning)| warning)
+            .collect()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SmartDisk {
     pub index: u32,
@@ -30,6 +59,7 @@ pub struct SmartDisk {
     pub serial: String,
     pub bus_type: u32,
     pub critical_warning: u8,
+    pub warnings: Vec<SmartWarning>,
     pub temperature: Option<u32>,
     pub available_spare: Option<u8>,
     pub spare_threshold: Option<u8>,
@@ -218,6 +248,7 @@ fn parse_nvme_health(bytes: &[u8]) -> SmartDiskFields {
 
     SmartDiskFields {
         critical_warning,
+        warnings: SmartWarning::from_mask(critical_warning),
         temperature,
         available_spare,
         spare_threshold,
@@ -233,6 +264,7 @@ fn parse_nvme_health(bytes: &[u8]) -> SmartDiskFields {
 
 struct SmartDiskFields {
     critical_warning: u8,
+    warnings: Vec<SmartWarning>,
     temperature: Option<u32>,
     available_spare: u8,
     spare_threshold: u8,
@@ -277,6 +309,7 @@ pub fn read_all() -> Vec<SmartDisk> {
                 serial: descriptor.serial,
                 bus_type: descriptor.bus_type,
                 critical_warning: parsed.critical_warning,
+                warnings: parsed.warnings,
                 temperature: parsed.temperature,
                 available_spare: Some(parsed.available_spare),
                 spare_threshold: Some(parsed.spare_threshold),
@@ -296,7 +329,7 @@ pub fn read_all() -> Vec<SmartDisk> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_nvme_health, to_u64};
+    use super::{parse_nvme_health, to_u64, SmartWarning};
 
     fn sample() -> [u8; 512] {
         let mut bytes = [0u8; 512];
@@ -334,6 +367,39 @@ mod tests {
     fn converts_large_counters() {
         assert_eq!(to_u64(u128::MAX), u64::MAX);
         assert_eq!(to_u64(42), 42);
+    }
+
+    #[test]
+    fn decodes_critical_warning_bits() {
+        let mut bytes = sample();
+        bytes[0] = 0b0010_1101;
+        assert_eq!(
+            parse_nvme_health(&bytes).warnings,
+            vec![
+                SmartWarning::AvailableSpare,
+                SmartWarning::Reliability,
+                SmartWarning::ReadOnly,
+                SmartWarning::PersistentMemory,
+            ]
+        );
+        bytes[0] = 0;
+        assert!(parse_nvme_health(&bytes).warnings.is_empty());
+    }
+
+    #[test]
+    fn serializes_warning_names_for_the_ui() {
+        assert_eq!(
+            serde_json::to_string(&SmartWarning::AvailableSpare).unwrap(),
+            "\"availableSpare\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SmartWarning::ReadOnly).unwrap(),
+            "\"readOnly\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SmartWarning::PersistentMemory).unwrap(),
+            "\"persistentMemory\""
+        );
     }
 
     #[test]

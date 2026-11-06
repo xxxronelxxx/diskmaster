@@ -378,12 +378,25 @@ export type DiskHealth = {
   readErrors: number | null;
   writeErrors: number | null;
   smart: boolean;
+  busType: number | null;
+  warnings: SmartWarning[];
+  dataRead: number | null;
+  dataWritten: number | null;
   mediaErrors: number | null;
   errorLogEntries: number | null;
   criticalWarning: number | null;
   availableSpare: number | null;
+  spareThreshold: number | null;
   unsafeShutdowns: number | null;
 };
+
+export type SmartWarning =
+  | "availableSpare"
+  | "temperature"
+  | "reliability"
+  | "readOnly"
+  | "volatileMemory"
+  | "persistentMemory";
 
 export type SmartDisk = {
   index: number;
@@ -391,6 +404,7 @@ export type SmartDisk = {
   serial: string;
   busType: number;
   criticalWarning: number;
+  warnings: SmartWarning[];
   temperature: number | null;
   availableSpare: number | null;
   spareThreshold: number | null;
@@ -422,6 +436,7 @@ export type MaintenanceStatus = {
   sensors: SensorInfo[];
   restorePoints: RestorePoint[];
   helperAvailable: boolean;
+  elevated: boolean;
 };
 
 /* -------------------------------- settings -------------------------------- */

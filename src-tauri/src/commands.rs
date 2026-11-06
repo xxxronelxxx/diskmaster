@@ -137,6 +137,7 @@ OS={} {} ({})
 CPU={} / {} ядер, {} потоков
 RAM={} / {}
 admin={}
+smart={}
 sensors={}
 autostart={}
 hotkeys={} / {}
@@ -155,6 +156,11 @@ hotkeys={} / {}
         info.ram_total,
         info.ram_free,
         info.admin,
+        if crate::smart::is_elevated() {
+            "direct"
+        } else {
+            "uac"
+        },
         sensor_line,
         crate::autostart_mode(),
         hotkeys.hotkey_show,

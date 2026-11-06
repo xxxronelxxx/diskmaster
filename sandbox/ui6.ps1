@@ -103,13 +103,15 @@ try {
   Snapshot 'before'
   Save-Shot 'ui6-before.png'
 
-  $button = Find-Exact 'Прочитать SMART (UAC)'
+  $button = Find-Exact 'Прочитать SMART'
+  if (-not $button) { $button = Find-Exact 'Прочитать SMART (UAC)' }
   if (-not $button) {
     $Result.notes += 'SMART button not found; trying to open maintenance via nav'
     $nav = Find-Exact 'Обслуживание'
     Invoke-El $nav | Out-Null
     Start-Sleep -Seconds 3
-    $button = Find-Exact 'Прочитать SMART (UAC)'
+    $button = Find-Exact 'Прочитать SMART'
+    if (-not $button) { $button = Find-Exact 'Прочитать SMART (UAC)' }
   }
   $Result.steps += [ordered]@{ step = 'smart-button'; found = [bool]$button }
 
@@ -125,7 +127,8 @@ try {
 
   $hint = Find-Exact 'SMART не прочитан: NVMe-диск не найден или Windows не отдал журнал здоровья.'
   $Result.steps += [ordered]@{ step = 'fallback-hint'; found = [bool]$hint }
-  $buttonAfter = Find-Exact 'Прочитать SMART (UAC)'
+  $buttonAfter = Find-Exact 'Прочитать SMART'
+  if (-not $buttonAfter) { $buttonAfter = Find-Exact 'Прочитать SMART (UAC)' }
   $Result.steps += [ordered]@{ step = 'button-still-there'; found = [bool]$buttonAfter }
 
   "SMART fallback checked" | Out-File (Join-Path $Share 'ui6-smart.txt') -Encoding utf8

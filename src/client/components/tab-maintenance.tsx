@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/client/api";
 import { queryClient } from "@/client/rpc-client";
-import type { MaintenanceStatus, SmartDisk } from "@/shared/types";
-import { formatBytes, formatDate } from "@/client/lib/format";
+import type { MaintenanceStatus, SmartDisk, SmartWarning } from "@/shared/types";
+import { formatBytes, formatCount, formatDate } from "@/client/lib/format";
 import { Badge, Button, Card, EmptyState, Modal, SectionTitle } from "./ui";
 import { SensorsPanel } from "./sensors-panel";
 import { AlertIcon, RefreshIcon, ShieldIcon, TrashIcon } from "./icons";
@@ -37,6 +37,81 @@ function mediaLabel(value: number | null): string {
   if (value === 4) return "SSD";
   if (value === 5) return "SCM";
   return "—";
+}
+
+const SMART_WARNING_LABELS: Record<SmartWarning, string> = {
+  availableSpare: "резерв ниже порога",
+  temperature: "температура вне нормы",
+  reliability: "надёжность снижена",
+  readOnly: "диск только для чтения",
+  volatileMemory: "сбой резервного питания",
+  persistentMemory: "энергонезависимая память только для чтения",
+};
+
+function SmartWarningChips({ warnings, critical }: { warnings: SmartWarning[]; critical: number }) {
+  if (!warnings.length) {
+    return critical > 0 ? (
+      <p className="mt-1 text-[10px] text-rose-300">
+        {t("SMART: критическое предупреждение (0x{code})", { code: critical.toString(16) })}
+      </p>
+    ) : null;
+  }
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {warnings.map((warning) => (
+        <span
+          key={warning}
+          className="rounded-full border border-rose-400/30 bg-rose-500/10 px-1.5 py-0.5 text-[10px] text-rose-200"
+        >
+          {t(SMART_WARNING_LABELS[warning])}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function SmartDetails({
+  source,
+  availableSpare,
+  spareThreshold,
+  unsafeShutdowns,
+  mediaErrors,
+  errorLogEntries,
+  dataRead,
+  dataWritten,
+}: {
+  source: string;
+  availableSpare: number | null;
+  spareThreshold: number | null;
+  unsafeShutdowns: number | null;
+  mediaErrors: number | null;
+  errorLogEntries: number | null;
+  dataRead: number | null;
+  dataWritten: number | null;
+}) {
+  const rows: Array<[string, string]> = [
+    [t("источник"), source],
+    [t("резерв"), availableSpare === null ? "—" : `${availableSpare}%`],
+    [t("порог резерва"), spareThreshold === null ? "—" : `${spareThreshold}%`],
+    [t("некорректных выключений"), unsafeShutdowns === null ? "—" : formatCount(unsafeShutdowns)],
+    [t("ошибок носителя"), mediaErrors === null ? "—" : formatCount(mediaErrors)],
+    [t("записей в журнале ошибок"), errorLogEntries === null ? "—" : formatCount(errorLogEntries)],
+    [t("записано"), dataWritten === null ? "—" : formatBytes(dataWritten, 1)],
+    [t("прочитано"), dataRead === null ? "—" : formatBytes(dataRead, 1)],
+  ];
+  return (
+    <details className="mt-1.5">
+      <summary className="cursor-pointer text-[10px] text-slate-500">{t("подробнее")}</summary>
+      <dl className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px]">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex items-baseline justify-between gap-2">
+            <dt className="text-slate-500">{label}</dt>
+            <dd className="truncate text-slate-300">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </details>
+  );
 }
 
 export function MaintenanceTab() {
@@ -84,7 +159,7 @@ export function MaintenanceTab() {
   }
 
   const helperMissing = status && !status.helperAvailable;
-  const smartLoaded = Boolean(smartDisks?.length) || Boolean(status?.disks.some((disk) => disk.smart));
+  const smartLoaded = smartDisks ? smartDisks.length > 0 : Boolean(status?.disks.some((disk) => disk.smart));
   const points = loadedPoints ?? status?.restorePoints ?? [];
   const oldest = points.reduce(
     (best, point) => (best === null || point.sequence < best.sequence ? point : best),
@@ -159,13 +234,17 @@ export function MaintenanceTab() {
                         {disk.powerOnHours !== null ? t(" · {value} ч", { value: disk.powerOnHours }) : ""}
                         {(disk.mediaErrors ?? 0) > 0 ? t(" · ошибок {value}", { value: disk.mediaErrors ?? 0 }) : ""}
                       </p>
-                      {disk.criticalWarning > 0 ? (
-                        <p className="mt-1 text-[10px] text-rose-300">
-                          {t("SMART: критическое предупреждение (0x{code})", {
-                            code: disk.criticalWarning.toString(16),
-                          })}
-                        </p>
-                      ) : null}
+                      <SmartWarningChips warnings={disk.warnings} critical={disk.criticalWarning} />
+                      <SmartDetails
+                        source={t("NVMe SMART")}
+                        availableSpare={disk.availableSpare}
+                        spareThreshold={disk.spareThreshold}
+                        unsafeShutdowns={disk.unsafeShutdowns}
+                        mediaErrors={disk.mediaErrors}
+                        errorLogEntries={disk.errorLogEntries}
+                        dataRead={disk.dataRead}
+                        dataWritten={disk.dataWritten}
+                      />
                     </div>
                   ))}
                 </div>
@@ -176,26 +255,28 @@ export function MaintenanceTab() {
               <div className="space-y-2">
                 {status.disks.map((disk) => {
                   const health = healthLabel(disk.health);
-                  const smart = disk.smart
-                    ? {
-                        temperature: disk.temperature,
-                        wear: disk.wear,
-                        powerOnHours: disk.powerOnHours,
-                        criticalWarning: disk.criticalWarning ?? 0,
-                        availableSpare: disk.availableSpare,
-                        unsafeShutdowns: disk.unsafeShutdowns,
-                        mediaErrors: disk.mediaErrors,
-                      }
+                  const matched = disk.smart
+                    ? undefined
                     : smartDisks?.find(
                         (item) =>
                           item.index === Number(disk.deviceId) ||
                           (item.serial !== "" && item.serial === disk.serial),
                       );
-                  const temperature = disk.temperature ?? smart?.temperature ?? null;
-                  const wear = disk.wear ?? smart?.wear ?? null;
-                  const hours = disk.powerOnHours ?? smart?.powerOnHours ?? null;
-                  const critical = smart?.criticalWarning ?? 0;
-                  const mediaErrors = smart?.mediaErrors ?? 0;
+                  const hasSmart = disk.smart || Boolean(matched);
+                  const temperature = disk.temperature ?? matched?.temperature ?? null;
+                  const wear = disk.wear ?? matched?.wear ?? null;
+                  const hours = disk.powerOnHours ?? matched?.powerOnHours ?? null;
+                  const warnings = disk.warnings.length ? disk.warnings : (matched?.warnings ?? []);
+                  const critical = disk.criticalWarning ?? matched?.criticalWarning ?? 0;
+                  const mediaErrors = disk.mediaErrors ?? matched?.mediaErrors ?? null;
+                  const availableSpare = disk.availableSpare ?? matched?.availableSpare ?? null;
+                  const spareThreshold = disk.spareThreshold ?? matched?.spareThreshold ?? null;
+                  const unsafeShutdowns = disk.unsafeShutdowns ?? matched?.unsafeShutdowns ?? null;
+                  const errorLogEntries = disk.errorLogEntries ?? matched?.errorLogEntries ?? null;
+                  const dataRead = disk.dataRead ?? matched?.dataRead ?? null;
+                  const dataWritten = disk.dataWritten ?? matched?.dataWritten ?? null;
+                  const unsupportedBus =
+                    !hasSmart && disk.busType !== null && disk.busType !== 17;
                   return (
                     <div key={disk.deviceId} className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-2.5">
                       <div className="flex items-center justify-between gap-2">
@@ -207,13 +288,23 @@ export function MaintenanceTab() {
                         {temperature !== null ? t(" · {value} °C", { value: temperature }) : ""}
                         {wear !== null ? t(" · износ {value}%", { value: wear }) : ""}
                         {hours !== null ? t(" · {value} ч", { value: hours }) : ""}
-                        {mediaErrors > 0 ? t(" · ошибок {value}", { value: mediaErrors }) : ""}
+                        {mediaErrors !== null && mediaErrors > 0 ? t(" · ошибок {value}", { value: mediaErrors }) : ""}
                       </p>
-                      {critical > 0 ? (
-                        <p className="mt-1 text-[10px] text-rose-300">
-                          {t("SMART: критическое предупреждение (0x{code})", {
-                            code: critical.toString(16),
-                          })}
+                      {hasSmart ? <SmartWarningChips warnings={warnings} critical={critical} /> : null}
+                      {hasSmart ? (
+                        <SmartDetails
+                          source={t("NVMe SMART")}
+                          availableSpare={availableSpare}
+                          spareThreshold={spareThreshold}
+                          unsafeShutdowns={unsafeShutdowns}
+                          mediaErrors={mediaErrors}
+                          errorLogEntries={errorLogEntries}
+                          dataRead={dataRead}
+                          dataWritten={dataWritten}
+                        />
+                      ) : unsupportedBus ? (
+                        <p className="mt-1 text-[10px] text-slate-500">
+                          {t("SMART пока поддерживается только для NVMe-дисков.")}
                         </p>
                       ) : null}
                     </div>
@@ -222,19 +313,25 @@ export function MaintenanceTab() {
               </div>
             )}
             <div className="mt-2 space-y-2">
-              {!smartLoaded ? (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => void readSmart()}
-                  loading={smartMutation.isPending}
-                >
-                  {t("Прочитать SMART (UAC)")}
-                </Button>
-              ) : null}
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => void readSmart()}
+                loading={smartMutation.isPending}
+              >
+                {smartLoaded
+                  ? status?.elevated
+                    ? t("Обновить SMART")
+                    : t("Обновить SMART (UAC)")
+                  : status?.elevated
+                    ? t("Прочитать SMART")
+                    : t("Прочитать SMART (UAC)")}
+              </Button>
               {smartDisks !== null && smartDisks.length === 0 ? (
                 <p className="text-[11px] text-slate-500">
-                  {t("SMART не прочитан: NVMe-диск не найден или Windows не отдал журнал здоровья.")}
+                  {status?.disks.some((disk) => disk.busType !== null && disk.busType !== 17)
+                    ? t("SMART пока поддерживается только для NVMe-дисков.")
+                    : t("SMART не прочитан: NVMe-диск не найден или Windows не отдал журнал здоровья.")}
                 </p>
               ) : null}
             </div>
