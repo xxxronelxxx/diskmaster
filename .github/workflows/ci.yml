@@ -31,6 +31,16 @@ jobs:
         with:
           workspaces: "src-tauri -> target"
 
+      - name: Helper resource
+        working-directory: src-tauri
+        run: |
+          New-Item -ItemType Directory -Force -Path resources | Out-Null
+          if (-not (Test-Path resources\DiskMasterHelper.exe)) {
+            Set-Content -Path resources\DiskMasterHelper.exe -Value '' -NoNewline
+          }
+          cargo build --bin DiskMasterHelper
+          Copy-Item target\debug\DiskMasterHelper.exe resources\DiskMasterHelper.exe -Force
+
       - name: Rust formatting
         working-directory: src-tauri
         run: cargo fmt --check
