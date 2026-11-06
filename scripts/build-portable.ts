@@ -62,6 +62,14 @@ try {
 ${String(error)}`,
   );
 }
+
+const helperSource = path.join(root, "src-tauri", "resources", "DiskMasterHelper.exe");
+if (existsSync(helperSource)) {
+  const helperDir = path.join(target, "resources");
+  mkdirSync(helperDir, { recursive: true });
+  copyFileSync(helperSource, path.join(helperDir, "DiskMasterHelper.exe"));
+}
+
 writeFileSync(path.join(target, "portable.marker"), "", "utf8");
 writeFileSync(
   path.join(target, "README.txt"),

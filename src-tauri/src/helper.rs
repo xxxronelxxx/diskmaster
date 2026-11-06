@@ -8,6 +8,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
+mod wmi_time;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -59,9 +61,9 @@ fn main() {
         let _ = fs::write(path, text);
     }
 
-    if !result.ok {
-        std::process::exit(1);
-    }
+    // Exit explicitly: COM/WMI teardown during process shutdown can block after
+    // a successful query, which would leave the main app waiting forever.
+    std::process::exit(if result.ok { 0 } else { 1 });
 }
 
 fn ok(message: impl Into<String>, data: Value) -> Output {
@@ -107,7 +109,11 @@ fn windows_old() -> Output {
     let root = std::env::var_os("SystemRoot")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("C:\\Windows"));
-    let target = root.join("Windows.old");
+    // `SystemRoot` is `C:\Windows`; Windows.old lives in the drive root.
+    let target = root
+        .parent()
+        .map(|drive| drive.join("Windows.old"))
+        .unwrap_or_else(|| root.join("Windows.old"));
 
     if !target.exists() {
         return ok(
@@ -126,8 +132,49 @@ fn windows_old() -> Output {
     }
 }
 
+/// DISM writes its console output in the OEM code page, not UTF-8.
+fn decode_oem(bytes: &[u8]) -> String {
+    use windows_sys::Win32::Globalization::{MultiByteToWideChar, CP_OEMCP};
+
+    if bytes.is_empty() {
+        return String::new();
+    }
+    let len = unsafe {
+        MultiByteToWideChar(
+            CP_OEMCP,
+            0,
+            bytes.as_ptr(),
+            bytes.len() as i32,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    if len <= 0 {
+        return String::from_utf8_lossy(bytes).into_owned();
+    }
+    let mut wide = vec![0u16; len as usize];
+    let written = unsafe {
+        MultiByteToWideChar(
+            CP_OEMCP,
+            0,
+            bytes.as_ptr(),
+            bytes.len() as i32,
+            wide.as_mut_ptr(),
+            len,
+        )
+    };
+    if written <= 0 {
+        return String::from_utf8_lossy(bytes).into_owned();
+    }
+    wide.truncate(written as usize);
+    String::from_utf16_lossy(&wide)
+}
+
 fn dism_cleanup() -> Output {
-    let output = Command::new("dism.exe")
+    let system = std::env::var_os("SystemRoot")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("C:\\Windows"));
+    let output = Command::new(system.join("System32").join("dism.exe"))
         .args(["/Online", "/Cleanup-Image", "/StartComponentCleanup"])
         .creation_flags(0x0800_0000)
         .output();
@@ -136,11 +183,13 @@ fn dism_cleanup() -> Output {
         Ok(result) => {
             let text = format!(
                 "{}{}",
-                String::from_utf8_lossy(&result.stdout),
-                String::from_utf8_lossy(&result.stderr)
+                decode_oem(&result.stdout),
+                decode_oem(&result.stderr)
             );
-            let tail: String = text
+            let normalized = text.replace('\r', "\n");
+            let tail: String = normalized
                 .lines()
+                .filter(|line| !line.trim().is_empty())
                 .rev()
                 .take(20)
                 .collect::<Vec<_>>()
@@ -234,7 +283,7 @@ fn restore_points_list() -> Output {
             json!({
                 "sequence": point.sequence,
                 "description": point.description,
-                "createdAt": point.creation,
+                "createdAt": point.creation.map(|raw| wmi_time::to_iso(&raw).unwrap_or(raw)),
                 "kind": point.kind,
             })
         })
@@ -353,4 +402,20 @@ fn _hide_console() {
     let _ = OsStr::new("");
     let _ = Instant::now();
     let _ = Duration::from_secs(0);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::decode_oem;
+
+    #[test]
+    fn decodes_oem_cyrillic() {
+        // "ОК" in the Russian OEM code page (cp866).
+        assert_eq!(decode_oem(&[0x8E, 0x8A]), "ОК");
+    }
+
+    #[test]
+    fn falls_back_on_empty_input() {
+        assert_eq!(decode_oem(&[]), "");
+    }
 }

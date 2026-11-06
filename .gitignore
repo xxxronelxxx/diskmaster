@@ -65,3 +65,6 @@ etilqs_*
 *.tsbuildinfo
 
 ### End of Quests .gitignore ###
+
+# Sandbox test workspace
+.sandbox/

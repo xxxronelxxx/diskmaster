@@ -22,6 +22,7 @@ mod types;
 mod widget;
 mod win_text;
 mod winget;
+mod wmi_time;
 
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 

@@ -190,7 +190,9 @@ fn restore_points() -> Vec<RestorePoint> {
         .map(|point| RestorePoint {
             sequence: point.sequence,
             description: point.description,
-            created_at: point.created_at,
+            created_at: point
+                .created_at
+                .map(|raw| crate::wmi_time::to_iso(&raw).unwrap_or(raw)),
             kind: point.kind,
         })
         .collect()
