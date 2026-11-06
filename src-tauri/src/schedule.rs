@@ -231,6 +231,14 @@ pub fn run_now() -> CleanResult {
         categories: categories.clone(),
         trigger: "manual".into(),
     });
+    crate::clean_history::record(
+        "clean",
+        "manual",
+        &categories,
+        result.freed_bytes,
+        result.deleted_files,
+        &result.errors,
+    );
 
     let mut next = config;
     next.last_run_at = Some(chrono::Utc::now().timestamp_millis());
@@ -294,9 +302,17 @@ pub fn scheduled_clean(input: &[String], threshold_arg: Option<u64>) -> CleanRes
         at,
         freed_bytes: result.freed_bytes,
         files: result.deleted_files,
-        categories,
+        categories: categories.clone(),
         trigger: "scheduled".into(),
     });
+    crate::clean_history::record(
+        "clean",
+        "scheduled",
+        &categories,
+        result.freed_bytes,
+        result.deleted_files,
+        &result.errors,
+    );
 
     config.last_run_at = Some(at);
     config.last_freed_bytes = Some(result.freed_bytes);

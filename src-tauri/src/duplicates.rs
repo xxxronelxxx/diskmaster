@@ -8,7 +8,8 @@ use std::time::{Duration, Instant};
 
 use rayon::prelude::*;
 
-use crate::paths::home_dir;
+use crate::hash_cache::{self, CacheEntry};
+use crate::paths::{self, home_dir};
 use crate::state::AppState;
 use crate::types::{DuplicateFile, DuplicateGroup, DuplicateProgress, DuplicateScan};
 
@@ -141,6 +142,16 @@ fn filetime_to_millis(high: u32, low: u32) -> i64 {
     ((ticks - 116_444_736_000_000_000) / 10_000).max(0)
 }
 
+fn is_excluded(path: &Path, excluded: &[String]) -> bool {
+    if excluded.is_empty() {
+        return false;
+    }
+    let normalized = paths::normalize(path);
+    excluded
+        .iter()
+        .any(|entry| normalized == *entry || normalized.starts_with(&format!("{entry}\\")))
+}
+
 /// Enumerates a directory tree with `FindFirstFileEx`, which returns the size
 /// and timestamp together with the name. Per-file `stat` calls were the main
 /// reason the old walker took 25–40 seconds on a 300k-file profile.
@@ -151,6 +162,7 @@ fn collect_candidates(
     started: Instant,
     deadline: Instant,
     cancel: &AtomicBool,
+    excluded: &[String],
 ) -> (HashMap<u64, Vec<Candidate>>, u64, bool) {
     use std::ffi::c_void;
     use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
@@ -208,8 +220,9 @@ fn collect_candidates(
                 let attributes = data.dwFileAttributes;
                 if attributes & FILE_ATTRIBUTE_REPARSE_POINT == 0 {
                     if attributes & FILE_ATTRIBUTE_DIRECTORY != 0 {
-                        if depth < 12 && !skip_dir(&name) {
-                            stack.push((directory.join(&name), depth + 1));
+                        let child = directory.join(&name);
+                        if depth < 12 && !skip_dir(&name) && !is_excluded(&child, excluded) {
+                            stack.push((child, depth + 1));
                         }
                     } else {
                         scanned += 1;
@@ -253,6 +266,7 @@ pub fn scan_duplicates(
     shared: &AppState,
     root: Option<String>,
     min_size_kb: Option<f64>,
+    exclude: Vec<String>,
 ) -> DuplicateScan {
     let started = Instant::now();
     let root = root
@@ -291,8 +305,14 @@ pub fn scan_duplicates(
         error: None,
     };
 
-    let (by_size, scanned, truncated) =
-        collect_candidates(shared, &root, min_size, started, deadline, &cancel);
+    let excluded: Vec<String> = exclude
+        .iter()
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| paths::normalize(Path::new(value)))
+        .collect();
+    let (by_size, scanned, truncated) = collect_candidates(
+        shared, &root, min_size, started, deadline, &cancel, &excluded,
+    );
     scan.scanned_files = scanned;
     scan.truncated = truncated;
     let walk_ms = started.elapsed().as_millis();
@@ -312,14 +332,35 @@ pub fn scan_duplicates(
         .flat_map(|(_, items)| items)
         .collect();
     scan.candidate_files = candidates.len() as u64;
-    let total = candidates.len() as u64;
+
+    let snapshot = hash_cache::load();
+    let mut final_results: Vec<(Candidate, String)> = Vec::new();
+    let mut to_quick: Vec<Candidate> = Vec::new();
+    let mut cached_count = 0u64;
+
+    for candidate in candidates {
+        if let Some(hash) = hash_cache::lookup(
+            &snapshot,
+            &candidate.path,
+            candidate.size,
+            candidate.modified,
+        ) {
+            cached_count += 1;
+            final_results.push((candidate, hash.to_string()));
+        } else {
+            to_quick.push(candidate);
+        }
+    }
+
+    let total = to_quick.len() as u64;
     publish_progress(shared, "hashing", scanned, 0, total, 30, false);
 
     let quick_started = Instant::now();
     let processed = AtomicU64::new(0);
+    let mut new_entries: Vec<(String, CacheEntry)> = Vec::new();
 
     // Pass 1: full hash for small files, cheap head+tail hash for large ones.
-    let quick: Vec<(Candidate, String)> = candidates
+    let quick: Vec<(Candidate, String)> = to_quick
         .par_iter()
         .filter_map(|candidate| {
             if cancel.load(Ordering::SeqCst) {
@@ -356,7 +397,6 @@ pub fn scan_duplicates(
             .push(candidate);
     }
 
-    let mut final_results: Vec<(Candidate, String)> = Vec::new();
     let mut full_candidates: Vec<Candidate> = Vec::new();
 
     for ((size, hash), items) in quick_groups {
@@ -368,6 +408,10 @@ pub fn scan_duplicates(
         } else {
             // Already a full hash for small files.
             for item in items {
+                new_entries.push((
+                    paths::normalize(&item.path),
+                    hash_cache::make_entry(size, item.modified, hash.clone()),
+                ));
                 final_results.push((item, hash.clone()));
             }
         }
@@ -404,7 +448,17 @@ pub fn scan_duplicates(
         })
         .collect();
     let full_ms = full_started.elapsed().as_millis();
+    for (candidate, hash) in &full {
+        new_entries.push((
+            paths::normalize(&candidate.path),
+            hash_cache::make_entry(candidate.size, candidate.modified, hash.clone()),
+        ));
+    }
     final_results.extend(full);
+
+    if !new_entries.is_empty() {
+        hash_cache::merge_and_save(&snapshot, new_entries);
+    }
 
     let cancelled = cancel.load(Ordering::SeqCst);
 
@@ -468,10 +522,11 @@ pub fn scan_duplicates(
     }
 
     crate::logging::log(&format!(
-        "duplicates scan: walk={walk_ms}ms quick={quick_ms}ms full={full_ms}ms total={}ms ({} files, {} candidates)",
+        "duplicates scan: walk={walk_ms}ms quick={quick_ms}ms full={full_ms}ms total={}ms ({} files, {} candidates, {} cached)",
         started.elapsed().as_millis(),
         scan.scanned_files,
-        scan.candidate_files
+        scan.candidate_files,
+        cached_count
     ));
 
     {

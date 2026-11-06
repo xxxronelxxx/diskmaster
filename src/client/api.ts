@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  CleanHistoryEntry,
+  CleanPreview,
   CleanResult,
   DeleteResult,
   DuplicateProgress,
@@ -59,6 +61,9 @@ export const api = {
   startScan: (input?: { thresholdMb?: number }) => invoke<ScanState>("start_scan", payload(input)),
   scanStatus: (input: { jobId: string }) => invoke<ScanState | null>("scan_status", { input }),
   cleanJunk: (input: { categories: string[] }) => invoke<CleanResult>("clean_junk", { input }),
+  previewClean: (input: { categories: string[] }) => invoke<CleanPreview>("preview_clean", { input }),
+  cleanHistory: () => invoke<CleanHistoryEntry[]>("clean_history"),
+  writeTextFile: (input: { path: string; content: string }) => invoke<boolean>("write_text_file", { input }),
   deleteLargeFiles: (input: { paths: string[] }) => invoke<RecycleResult>("delete_large_files", { input }),
   reveal: (input: { path: string }) => invoke<{ ok: boolean; error?: string }>("reveal", { input }),
 
@@ -66,7 +71,7 @@ export const api = {
   folderAnalyze: (input?: { path?: string }) => invoke<FolderAnalysis>("folder_analyze", payload(input)),
   folderDelete: (input: { paths: string[]; permanent?: boolean }) => invoke<DeleteResult>("folder_delete", { input }),
 
-  duplicatesScan: (input?: { root?: string; minSizeKb?: number }) => invoke<DuplicateScan>("duplicates_scan", payload(input)),
+  duplicatesScan: (input?: { root?: string; minSizeKb?: number; exclude?: string[] }) => invoke<DuplicateScan>("duplicates_scan", payload(input)),
   duplicatesLast: () => invoke<DuplicateScan | null>("duplicates_last"),
   duplicatesStatus: () => invoke<DuplicateProgress | null>("duplicates_status"),
   duplicatesCancel: () => invoke<void>("duplicates_cancel"),
@@ -118,6 +123,8 @@ export const queryClient = {
       mutationOptions: mutation<never, never>("scan_status"),
     },
     cleanJunk: { mutationOptions: mutation<{ categories: string[] }, CleanResult>("clean_junk") },
+    previewClean: { mutationOptions: mutation<{ categories: string[] }, CleanPreview>("preview_clean") },
+    cleanHistory: { queryOptions: () => query<CleanHistoryEntry[]>("clean_history") },
     deleteLargeFiles: { mutationOptions: mutation<{ paths: string[] }, RecycleResult>("delete_large_files") },
     reveal: (input: { path: string }) => api.reveal(input),
 
@@ -128,7 +135,7 @@ export const queryClient = {
     },
     folderDelete: { mutationOptions: mutation<{ paths: string[]; permanent?: boolean }, DeleteResult>("folder_delete") },
 
-    duplicatesScan: { mutationOptions: mutation<{ root?: string; minSizeKb?: number } | undefined, DuplicateScan>("duplicates_scan") },
+    duplicatesScan: { mutationOptions: mutation<{ root?: string; minSizeKb?: number; exclude?: string[] } | undefined, DuplicateScan>("duplicates_scan") },
     duplicatesLast: { queryOptions: () => query<DuplicateScan | null>("duplicates_last") },
     duplicatesStatus: { queryOptions: () => query<DuplicateProgress | null>("duplicates_status") },
     duplicatesCancel: { mutationOptions: mutation<Record<string, never> | undefined, void>("duplicates_cancel") },

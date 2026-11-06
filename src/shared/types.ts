@@ -126,6 +126,34 @@ export type CleanResult = {
   errors: string[];
 };
 
+export type PreviewEntry = {
+  path: string;
+  size: number;
+};
+
+export type PreviewCategory = {
+  id: string;
+  name: string;
+  totalBytes: number;
+  totalFiles: number;
+  entries: PreviewEntry[];
+  truncated: boolean;
+};
+
+export type CleanPreview = {
+  categories: PreviewCategory[];
+};
+
+export type CleanHistoryEntry = {
+  at: number;
+  action: string;
+  trigger: string;
+  categories: string[];
+  bytes: number;
+  files: number;
+  errors: string[];
+};
+
 export type RecycleResult = {
   removed: number;
   bytes: number;

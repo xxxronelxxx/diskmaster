@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import type { CleanResult, ScanCategoryResult, ScanState } from "@/shared/types";
+import type { CleanPreview, CleanResult, ScanCategoryResult, ScanState } from "@/shared/types";
 import { queryClient } from "@/client/rpc-client";
 import { formatBytes, formatCount } from "@/client/lib/format";
 import { Badge, Button, Card, EmptyState, Modal, Progress, SectionTitle } from "./ui";
@@ -108,8 +108,10 @@ export function CleanupTab({
   const [cleanLog, setCleanLog] = useState<{ jobId: string; bytes: Record<string, number> } | null>(null);
   const [cleanResult, setCleanResult] = useState<{ jobId: string; data: CleanResult } | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [preview, setPreview] = useState<CleanPreview | null>(null);
 
   const cleanMutation = useMutation(queryClient.system.cleanJunk.mutationOptions());
+  const previewMutation = useMutation(queryClient.system.previewClean.mutationOptions());
 
   const jobId = job?.jobId ?? "";
   const scanning = Boolean(job && !job.finishedAt);
@@ -391,6 +393,43 @@ export function CleanupTab({
             </li>
           ))}
         </ul>
+
+        <div className="mt-3">
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={previewMutation.isPending}
+            onClick={async () => {
+              const ids = selectedCategories.map((category) => category.id);
+              const result = await previewMutation.mutateAsync({ categories: ids });
+              setPreview(result);
+            }}
+          >
+            Показать, что будет удалено
+          </Button>
+
+          {preview ? (
+            <div className="mt-3 max-h-64 space-y-3 overflow-auto rounded-xl border border-white/10 bg-white/[0.03] p-3">
+              {preview.categories.map((category) => (
+                <div key={category.id}>
+                  <p className="text-[11px] font-medium text-slate-200">
+                    {category.name} · {formatBytes(category.totalBytes)} · {formatCount(category.totalFiles)} файлов
+                  </p>
+                  <ul className="mt-1 space-y-0.5">
+                    {category.entries.slice(0, 20).map((entry) => (
+                      <li key={entry.path} className="truncate font-mono text-[10px] text-slate-500" title={entry.path}>
+                        {formatBytes(entry.size)} · {entry.path}
+                      </li>
+                    ))}
+                  </ul>
+                  {category.truncated ? (
+                    <p className="mt-0.5 text-[10px] text-slate-600">…показаны крупнейшие элементы</p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </Modal>
     </div>
   );

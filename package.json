@@ -1,7 +1,7 @@
 {
   "name": "disk-master",
   "private": true,
-  "version": "1.4.1",
+  "version": "1.5.0",
   "type": "module",
   "scripts": {
     "dev": "tauri dev",
@@ -19,6 +19,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.85.5",
     "@tauri-apps/api": "^2.9.0",
+    "@tauri-apps/plugin-dialog": "^2.8.4",
     "@tauri-apps/plugin-process": "^2.3.0",
     "@tauri-apps/plugin-updater": "^2.9.0",
     "react": "^19.1.1",

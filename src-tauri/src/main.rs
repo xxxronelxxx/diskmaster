@@ -1,9 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod clean_history;
 mod commands;
 mod duplicates;
 mod folders;
 mod guard;
+mod hash_cache;
 mod history;
 mod logging;
 mod metrics;
@@ -284,6 +286,7 @@ fn main() {
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             commands::portable_mode,
@@ -299,6 +302,9 @@ fn main() {
             commands::start_scan,
             commands::scan_status,
             commands::clean_junk,
+            commands::preview_clean,
+            commands::clean_history,
+            commands::write_text_file,
             commands::delete_large_files,
             commands::reveal,
             commands::folder_roots,

@@ -4,6 +4,7 @@ import type { FolderAnalysis, FolderEntry } from "@/shared/types";
 import { queryClient, rpcClient } from "@/client/rpc-client";
 import { formatBytes, formatCount, formatDate } from "@/client/lib/format";
 import { Button, Card, EmptyState, Modal, SectionTitle } from "./ui";
+import { Treemap } from "./treemap";
 import {
   AlertIcon,
   ChevronIcon,
@@ -279,6 +280,7 @@ function FolderNode({
 export function FoldersTab() {
   const [currentPath, setCurrentPath] = useState<string | undefined>(undefined);
   const [sort, setSort] = useState<SortKey>("size");
+  const [view, setView] = useState<"list" | "map">("list");
   const [selected, setSelected] = useState<string | null>(null);
   const [context, setContext] = useState<ContextTarget | null>(null);
   const [pending, setPending] = useState<FolderEntry[] | null>(null);
@@ -478,6 +480,24 @@ export function FoldersTab() {
               <div className="flex gap-1 rounded-lg border border-white/10 p-0.5">
                 {(
                   [
+                    ["list", "Список"],
+                    ["map", "Карта"],
+                  ] as ["list" | "map", string][]
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setView(key)}
+                    className={`rounded px-2 py-1 text-[11px] transition-colors ${
+                      view === key ? "bg-white/[0.1] text-white" : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-1 rounded-lg border border-white/10 p-0.5">
+                {(
+                  [
                     ["size", "Размер"],
                     ["files", "Файлы"],
                     ["name", "Имя"],
@@ -497,23 +517,27 @@ export function FoldersTab() {
             </div>
           </div>
 
-          <div className="divide-y divide-white/[0.05]">
-            {entries.map((entry, index) => (
-              <FolderNode
-                key={entry.path}
-                entry={entry}
-                depth={0}
-                total={total}
-                colorIndex={index}
-                selected={selected}
-                onSelect={setSelected}
-                onDelete={requestDelete}
-                onContext={setContext}
-                expandedPaths={expandedPaths}
-                onToggleExpand={toggleExpand}
-              />
-            ))}
-          </div>
+          {view === "map" ? (
+            <Treemap entries={entries} total={total} onOpen={openRoot} />
+          ) : (
+            <div className="divide-y divide-white/[0.05]">
+              {entries.map((entry, index) => (
+                <FolderNode
+                  key={entry.path}
+                  entry={entry}
+                  depth={0}
+                  total={total}
+                  colorIndex={index}
+                  selected={selected}
+                  onSelect={setSelected}
+                  onDelete={requestDelete}
+                  onContext={setContext}
+                  expandedPaths={expandedPaths}
+                  onToggleExpand={toggleExpand}
+                />
+              ))}
+            </div>
+          )}
         </Card>
       ) : null}
 

@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { save } from "@tauri-apps/plugin-dialog";
+import { api } from "@/client/api";
 import type { ScanState } from "@/shared/types";
 import { queryClient, rpcClient } from "@/client/rpc-client";
 import { formatBytes, formatDate } from "@/client/lib/format";
@@ -32,6 +34,11 @@ export function LargeFilesTab({
 
   const deleteMutation = useMutation(queryClient.system.deleteLargeFiles.mutationOptions());
 
+  const [query, setQuery] = useState("");
+  const [extension, setExtension] = useState<string | null>(null);
+  const [age, setAge] = useState<"all" | "6" | "12">("all");
+  const [exporting, setExporting] = useState(false);
+
   const scanning = Boolean(job && !job.finishedAt);
   const finished = Boolean(job?.finishedAt);
   const jobId = job?.jobId ?? "";
@@ -50,11 +57,49 @@ export function LargeFilesTab({
   }
 
   const files = (job?.largeFiles ?? []).filter((file) => !removed.has(file.path));
+  const extensions = [...new Set(files.map((file) => {
+    const dot = file.name.lastIndexOf(".");
+    return dot > 0 ? file.name.slice(dot + 1).toLowerCase() : "";
+  }).filter(Boolean))].sort();
 
-  const selectedFiles = files.filter((file) => selected.has(file.path));
+  const visibleFiles = files.filter((file) => {
+    if (extension && !file.name.toLowerCase().endsWith(`.${extension}`)) return false;
+    if (age !== "all") {
+      const months = age === "6" ? 6 : 12;
+      if (Date.now() - file.modified < months * 30 * 24 * 60 * 60 * 1000) return false;
+    }
+    if (query && !file.path.toLowerCase().includes(query.toLowerCase())) return false;
+    return true;
+  });
+
+  const selectedFiles = visibleFiles.filter((file) => selected.has(file.path));
   const selectedBytes = selectedFiles.reduce((sum, file) => sum + file.size, 0);
-  const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
-  const allSelected = files.length > 0 && selected.size === files.length;
+  const totalBytes = visibleFiles.reduce((sum, file) => sum + file.size, 0);
+  const allSelected = visibleFiles.length > 0 && visibleFiles.every((file) => selected.has(file.path));
+
+  async function exportCsv() {
+    const path = await save({
+      defaultPath: "large-files.csv",
+      filters: [{ name: "CSV", extensions: ["csv"] }],
+    });
+    if (!path) return;
+    setExporting(true);
+    try {
+      const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
+      const rows = [
+        ["path", "name", "size", "modified"].join(","),
+        ...visibleFiles.map((file) =>
+          [escape(file.path), escape(file.name), String(file.size), String(file.modified)].join(","),
+        ),
+      ];
+      await api.writeTextFile({
+        path,
+        content: String.fromCharCode(0xfeff) + rows.join(String.fromCharCode(13, 10)),
+      });
+    } finally {
+      setExporting(false);
+    }
+  }
 
   function toggle(path: string) {
     const next = new Set(selected);
@@ -112,6 +157,44 @@ export function LargeFilesTab({
         ))}
       </div>
 
+      {finished && files.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Поиск по пути"
+            className="min-w-48 flex-1 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-200 outline-none placeholder:text-slate-600 focus:border-emerald-400/40"
+          />
+          <button
+            onClick={() => setExtension(null)}
+            className={`rounded-lg border px-2.5 py-1 text-xs ${extension === null ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200" : "border-white/10 bg-white/[0.04] text-slate-300"}`}
+          >
+            Все
+          </button>
+          {extensions.slice(0, 8).map((value) => (
+            <button
+              key={value}
+              onClick={() => setExtension(extension === value ? null : value)}
+              className={`rounded-lg border px-2.5 py-1 text-xs ${extension === value ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200" : "border-white/10 bg-white/[0.04] text-slate-300"}`}
+            >
+              .{value}
+            </button>
+          ))}
+          <select
+            value={age}
+            onChange={(event) => setAge(event.target.value as "all" | "6" | "12")}
+            className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs text-slate-300 outline-none"
+          >
+            <option value="all">Любая дата</option>
+            <option value="6">старше 6 мес.</option>
+            <option value="12">старше 12 мес.</option>
+          </select>
+          <Button size="sm" variant="secondary" onClick={() => void exportCsv()} loading={exporting}>
+            CSV
+          </Button>
+        </div>
+      ) : null}
+
       {scanning && job ? (
         <Card className="p-4">
           <div className="flex items-center justify-between text-sm">
@@ -155,7 +238,7 @@ export function LargeFilesTab({
         </Card>
       ) : null}
 
-      {finished && files.length === 0 ? (
+      {finished && visibleFiles.length === 0 ? (
         <EmptyState
           icon={<CheckIcon className="size-6" />}
           title="Больших файлов не найдено"
@@ -163,7 +246,7 @@ export function LargeFilesTab({
         />
       ) : null}
 
-      {files.length > 0 ? (
+      {visibleFiles.length > 0 ? (
         <Card className="overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] px-4 py-3">
             <div className="flex items-center gap-3">
@@ -172,12 +255,12 @@ export function LargeFilesTab({
                 className="size-4 accent-emerald-500"
                 checked={allSelected}
                 onChange={() =>
-                  setSelected(allSelected ? new Set() : new Set(files.map((file) => file.path)))
+                  setSelected(allSelected ? new Set() : new Set(visibleFiles.map((file) => file.path)))
                 }
               />
               <div>
                 <p className="text-sm text-slate-100">
-                  {files.length} файлов · {formatBytes(totalBytes)}
+                  {visibleFiles.length} файлов · {formatBytes(totalBytes)}
                 </p>
                 {job?.largeFilesTruncated ? (
                   <p className="text-[11px] text-slate-500">показаны самые крупные</p>
@@ -199,7 +282,7 @@ export function LargeFilesTab({
           </div>
 
           <div className="divide-y divide-white/[0.06]">
-            {files.map((file) => {
+            {visibleFiles.map((file) => {
               const checked = selected.has(file.path);
               return (
                 <label

@@ -145,6 +145,8 @@ export function HistoryTab() {
 
   const historyQuery = useQuery(queryClient.system.historyGet.queryOptions());
   const captureMutation = useMutation(queryClient.system.historyCapture.mutationOptions());
+  const cleanHistoryQuery = useQuery(queryClient.system.cleanHistory.queryOptions());
+  const cleanHistory = cleanHistoryQuery.data ?? [];
 
   const summary = historyQuery.data;
 
@@ -233,6 +235,40 @@ export function HistoryTab() {
           </div>
         </Card>
       ) : null}
+
+      <Card className="overflow-hidden">
+        <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-2.5">
+          <p className="text-[13px] font-medium text-white">Последние очистки</p>
+          <span className="text-[10px] text-slate-500">{cleanHistory.length} записей</span>
+        </div>
+        {cleanHistory.length === 0 ? (
+          <p className="px-4 py-3 text-[11px] text-slate-500">Пока нет записей.</p>
+        ) : (
+          <div className="divide-y divide-white/[0.05]">
+            {cleanHistory.slice(0, 20).map((entry, index) => (
+              <div key={`${entry.at}-${index}`} className="flex flex-wrap items-center gap-3 px-4 py-2 text-[11px]">
+                <span className="w-32 shrink-0 text-slate-500">
+                  {new Date(entry.at).toLocaleString("ru-RU", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+                <span className="rounded-md border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-slate-400">
+                  {entry.action}
+                </span>
+                <span className="tabular-nums text-slate-200">{formatBytes(entry.bytes)}</span>
+                <span className="text-slate-500">{entry.files} объектов</span>
+                <span className="text-slate-600">{entry.trigger}</span>
+                {entry.errors.length > 0 ? (
+                  <span className="text-amber-300/80">{entry.errors.length} ошибок</span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

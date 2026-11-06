@@ -138,6 +138,30 @@ pub struct CleanResult {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PreviewEntry {
+    pub path: String,
+    pub size: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewCategory {
+    pub id: String,
+    pub name: String,
+    pub total_bytes: u64,
+    pub total_files: u64,
+    pub entries: Vec<PreviewEntry>,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanPreview {
+    pub categories: Vec<PreviewCategory>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RecycleResult {
     pub removed: u64,
     pub bytes: u64,

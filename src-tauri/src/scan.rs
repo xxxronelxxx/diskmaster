@@ -8,7 +8,8 @@ use crate::guard;
 use crate::paths::{home_dir, local_appdata, system_root};
 use crate::state::AppState;
 use crate::types::{
-    CleanCategoryResult, CleanResult, LargeFile, RecycleResult, ScanCategoryResult, ScanState,
+    CleanCategoryResult, CleanResult, LargeFile, PreviewCategory, PreviewEntry, RecycleResult,
+    ScanCategoryResult, ScanState,
 };
 
 const MB: u64 = 1024 * 1024;
@@ -58,6 +59,10 @@ struct CategoryDef {
 fn categories() -> Vec<CategoryDef> {
     let local = local_appdata();
     let system = system_root();
+    let home = home_dir();
+    let roaming = std::env::var_os("APPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join("AppData").join("Roaming"));
     vec![
         CategoryDef {
             id: "user-temp",
@@ -174,6 +179,105 @@ fn categories() -> Vec<CategoryDef> {
             kind: "contents",
             risk: "caution",
             needs_admin: true,
+            note: None,
+        },
+        CategoryDef {
+            id: "npm-cache",
+            name: "Кэш npm",
+            description: "Скачанные пакеты npm — пересоздадутся при следующей установке",
+            paths: vec![local.join("npm-cache"), roaming.join("npm-cache")],
+            kind: "contents",
+            risk: "caution",
+            needs_admin: false,
+            note: Some("Первая установка после очистки будет дольше"),
+        },
+        CategoryDef {
+            id: "pnpm-store",
+            name: "Хранилище pnpm",
+            description: "Глобальное хранилище пакетов pnpm",
+            paths: vec![local.join("pnpm").join("store"), local.join("pnpm-cache")],
+            kind: "contents",
+            risk: "caution",
+            needs_admin: false,
+            note: Some("Закройте проекты и редакторы перед очисткой"),
+        },
+        CategoryDef {
+            id: "yarn-cache",
+            name: "Кэш yarn",
+            description: "Кэш пакетов Yarn (Classic и Berry)",
+            paths: vec![
+                local.join("Yarn").join("Cache"),
+                local.join("Yarn").join("Berry").join("cache"),
+            ],
+            kind: "contents",
+            risk: "caution",
+            needs_admin: false,
+            note: Some("Первая установка после очистки будет дольше"),
+        },
+        CategoryDef {
+            id: "pip-cache",
+            name: "Кэш pip",
+            description: "Скачанные Python-пакеты pip",
+            paths: vec![local.join("pip").join("Cache")],
+            kind: "contents",
+            risk: "caution",
+            needs_admin: false,
+            note: None,
+        },
+        CategoryDef {
+            id: "cargo-cache",
+            name: "Кэш cargo",
+            description: "Скачанные крейты и git-репозитории Cargo",
+            paths: vec![
+                home.join(".cargo").join("registry").join("cache"),
+                home.join(".cargo").join("git").join("db"),
+            ],
+            kind: "contents",
+            risk: "caution",
+            needs_admin: false,
+            note: Some("Проекты будут пересобираться дольше"),
+        },
+        CategoryDef {
+            id: "gradle-cache",
+            name: "Кэш Gradle",
+            description: "Зависимости и артефакты сборки Gradle",
+            paths: vec![home.join(".gradle").join("caches")],
+            kind: "contents",
+            risk: "caution",
+            needs_admin: false,
+            note: Some("Первая сборка после очистки будет значительно дольше"),
+        },
+        CategoryDef {
+            id: "maven-cache",
+            name: "Кэш Maven",
+            description: "Локальный репозиторий Maven (~/.m2)",
+            paths: vec![home.join(".m2").join("repository")],
+            kind: "contents",
+            risk: "caution",
+            needs_admin: false,
+            note: Some("Зависимости скачаются заново при следующей сборке"),
+        },
+        CategoryDef {
+            id: "nuget-cache",
+            name: "Кэш NuGet",
+            description: "Глобальный кэш пакетов NuGet (~/.nuget)",
+            paths: vec![home.join(".nuget").join("packages")],
+            kind: "contents",
+            risk: "caution",
+            needs_admin: false,
+            note: Some("Проекты .NET восстановят пакеты при сборке"),
+        },
+        CategoryDef {
+            id: "go-cache",
+            name: "Кэш Go",
+            description: "Кэш сборки и скачанные модули Go",
+            paths: vec![
+                local.join("go-build"),
+                home.join("go").join("pkg").join("mod").join("cache"),
+            ],
+            kind: "contents",
+            risk: "caution",
+            needs_admin: false,
             note: None,
         },
         CategoryDef {
@@ -919,6 +1023,92 @@ fn fixed_drive_letters() -> Vec<String> {
     result
 }
 
+/// Read-only list of the largest items a cleanup would remove.
+#[allow(clippy::needless_late_init)]
+pub fn preview_categories(ids: &[String], limit: usize) -> Vec<PreviewCategory> {
+    let definitions = categories();
+    let mut result = Vec::new();
+
+    for def in definitions
+        .iter()
+        .filter(|def| ids.iter().any(|id| id == def.id))
+    {
+        let mut entries: Vec<PreviewEntry> = Vec::new();
+        let mut total_bytes = 0u64;
+        let mut total_files = 0u64;
+        let mut truncated_by_budget = false;
+
+        if def.kind == "recycle-bin" {
+            if let Some((count, size)) = recycle_bin_info() {
+                total_files = count;
+                total_bytes = size;
+            }
+        } else if def.kind == "files" {
+            for target in &def.paths {
+                let Ok(entries_iter) = fs::read_dir(target) else {
+                    continue;
+                };
+                for entry in entries_iter.flatten() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    if def.id == "thumbnails" && !thumbnails_pattern(&name) {
+                        continue;
+                    }
+                    if let Ok(metadata) = entry.metadata() {
+                        if metadata.is_file() {
+                            total_bytes += metadata.len();
+                            total_files += 1;
+                            entries.push(PreviewEntry {
+                                path: entry.path().to_string_lossy().to_string(),
+                                size: metadata.len(),
+                            });
+                        }
+                    }
+                }
+            }
+        } else {
+            let mut timed_out = false;
+            for target in &def.paths {
+                if !target.is_dir() {
+                    continue;
+                }
+                let measured = walk(
+                    target,
+                    None,
+                    Duration::from_secs(8),
+                    |path, metadata| {
+                        entries.push(PreviewEntry {
+                            path: path.to_string_lossy().to_string(),
+                            size: metadata.len(),
+                        });
+                    },
+                    |_files, _bytes, _current| {},
+                );
+                total_bytes += measured.bytes;
+                total_files += measured.files;
+                if measured.timed_out {
+                    timed_out = true;
+                }
+            }
+            truncated_by_budget = timed_out;
+        }
+
+        entries.sort_by_key(|entry| std::cmp::Reverse(entry.size));
+        let truncated = truncated_by_budget || entries.len() > limit;
+        entries.truncate(limit);
+
+        result.push(PreviewCategory {
+            id: def.id.into(),
+            name: def.name.into(),
+            total_bytes,
+            total_files,
+            entries,
+            truncated,
+        });
+    }
+
+    result
+}
+
 pub fn category_ids() -> Vec<String> {
     categories().iter().map(|def| def.id.to_string()).collect()
 }
@@ -966,6 +1156,24 @@ pub fn _quiet_rayon() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn developer_cache_categories_are_registered() {
+        let ids = category_ids();
+        for id in [
+            "npm-cache",
+            "pnpm-store",
+            "yarn-cache",
+            "pip-cache",
+            "cargo-cache",
+            "gradle-cache",
+            "maven-cache",
+            "nuget-cache",
+            "go-cache",
+        ] {
+            assert!(ids.iter().any(|value| value == id), "missing {id}");
+        }
+    }
 
     #[test]
     fn recycle_bin_query_is_available() {

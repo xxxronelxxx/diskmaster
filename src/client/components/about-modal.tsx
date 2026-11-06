@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { SystemInfo } from "@/shared/types";
 import type { Updater } from "@/client/lib/updater";
 import { Button, Modal } from "./ui";
+import { t } from "@/client/i18n";
 
 const REPO = "https://github.com/xxxronelxxx/diskmaster";
 
@@ -44,9 +45,9 @@ export function AboutModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="О программе"
+      title={t("about")}
       description="Диск-Мастер — очистка диска, анализ места и мониторинг Windows."
-      footer={<Button variant="secondary" onClick={onClose}>Закрыть</Button>}
+      footer={<Button variant="secondary" onClick={onClose}>{t("close")}</Button>}
     >
       <div className="space-y-0.5">
         <Row label="Версия" value={`v${updater.version || "…"}`} />
@@ -69,10 +70,10 @@ export function AboutModal({
           Открыть журнал
         </Button>
         <Button size="sm" variant="secondary" onClick={() => void copyDiagnostics()}>
-          {copied ? "Скопировано" : "Скопировать диагностику"}
+          {copied ? "Скопировано" : t("copyDiagnostics")}
         </Button>
         <Button size="sm" variant="primary" onClick={() => void updater.checkNow()}>
-          Проверить обновления
+          {t("checkUpdates")}
         </Button>
       </div>
 

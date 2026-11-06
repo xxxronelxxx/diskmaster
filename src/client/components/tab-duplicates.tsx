@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { open } from "@tauri-apps/plugin-dialog";
 import type { DuplicateGroup, DuplicateScan } from "@/shared/types";
 import { queryClient, rpcClient } from "@/client/rpc-client";
-import { formatBytes, formatCount, formatDate } from "@/client/lib/format";
+import { formatBytes, formatCount, formatDate, shortPath } from "@/client/lib/format";
 import { Badge, Button, Card, EmptyState, Modal, Progress, SectionTitle } from "./ui";
 import { AlertIcon, CheckIcon, FilesIcon, RefreshIcon, TrashIcon } from "./icons";
 
@@ -15,6 +16,18 @@ export function DuplicatesTab() {
   const [removed, setRemoved] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState<{ paths: string[]; bytes: number } | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [root, setRoot] = useState<string | null>(() => localStorage.getItem("dm.dup.root"));
+  const [exclude, setExclude] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem("dm.dup.exclude");
+      return raw ? (JSON.parse(raw) as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [strategy, setStrategy] = useState<"first" | "newest" | "oldest" | "shortest">(
+    () => (localStorage.getItem("dm.dup.strategy") as "first" | "newest" | "oldest" | "shortest") || "first",
+  );
 
   const scanMutation = useMutation(queryClient.system.duplicatesScan.mutationOptions());
   const cancelMutation = useMutation(queryClient.system.duplicatesCancel.mutationOptions());
@@ -44,14 +57,32 @@ export function DuplicatesTab() {
     setNote(null);
     setRemoved(new Set());
     setKeepFirst(new Set());
-    const result = (await scanMutation.mutateAsync({ minSizeKb: minSize })) as DuplicateScan;
+    const result = (await scanMutation.mutateAsync({
+      minSizeKb: minSize,
+      root: root ?? undefined,
+      exclude,
+    })) as DuplicateScan;
     if (result.error) setNote(result.error);
     setScan(result);
   }
 
+  function keepIndex(group: DuplicateGroup): number {
+    if (strategy === "newest") {
+      return group.files.reduce((best, file, index) => (file.modified > group.files[best].modified ? index : best), 0);
+    }
+    if (strategy === "oldest") {
+      return group.files.reduce((best, file, index) => (file.modified < group.files[best].modified ? index : best), 0);
+    }
+    if (strategy === "shortest") {
+      return group.files.reduce((best, file, index) => (file.path.length < group.files[best].path.length ? index : best), 0);
+    }
+    return 0;
+  }
+
   function filesToDelete(group: DuplicateGroup): string[] {
+    const keep = keepIndex(group);
     if (keepFirst.has(group.hash)) {
-      return group.files.slice(1).map((file) => file.path);
+      return group.files.filter((_, index) => index !== keep).map((file) => file.path);
     }
     return group.files.map((file) => file.path);
   }
@@ -65,7 +96,10 @@ export function DuplicatesTab() {
     const paths: string[] = [];
     let bytes = 0;
     for (const group of groups) {
-      const targets = keepOne ? group.files.slice(1) : group.files;
+      const keep = keepIndex(group);
+      const targets = keepOne
+        ? group.files.filter((_, index) => index !== keep)
+        : group.files;
       for (const file of targets) {
         paths.push(file.path);
         bytes += file.size;
@@ -144,6 +178,90 @@ export function DuplicatesTab() {
             }`}
           >
             {value >= 1024 ? "1 МБ" : `${value} КБ`}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-slate-500">Папка:</span>
+        <span className="max-w-72 truncate rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-slate-300" title={root ?? "Домашняя папка"}>
+          {root ? shortPath(root, 48) : "Домашняя папка"}
+        </span>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={async () => {
+            const selected = await open({ directory: true, multiple: false });
+            if (typeof selected === "string") {
+              setRoot(selected);
+              localStorage.setItem("dm.dup.root", selected);
+            }
+          }}
+          disabled={scanMutation.isPending}
+        >
+          Выбрать
+        </Button>
+        {root ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setRoot(null);
+              localStorage.removeItem("dm.dup.root");
+            }}
+            disabled={scanMutation.isPending}
+          >
+            Сбросить
+          </Button>
+        ) : null}
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={async () => {
+            const selected = await open({ directory: true, multiple: false });
+            if (typeof selected === "string" && !exclude.includes(selected)) {
+              const next = [...exclude, selected];
+              setExclude(next);
+              localStorage.setItem("dm.dup.exclude", JSON.stringify(next));
+            }
+          }}
+          disabled={scanMutation.isPending}
+        >
+          + Исключение
+        </Button>
+        {exclude.map((path) => (
+          <button
+            key={path}
+            onClick={() => {
+              const next = exclude.filter((value) => value !== path);
+              setExclude(next);
+              localStorage.setItem("dm.dup.exclude", JSON.stringify(next));
+            }}
+            className="max-w-56 truncate rounded-lg border border-rose-400/25 bg-rose-500/10 px-2 py-1 text-rose-200"
+            title={`Убрать исключение: ${path}`}
+          >
+            {shortPath(path, 32)} ×
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-slate-500">При удалении копий оставлять:</span>
+        {([
+          ["first", "первый"],
+          ["newest", "самый новый"],
+          ["oldest", "самый старый"],
+          ["shortest", "короткий путь"],
+        ] as const).map(([value, label]) => (
+          <button
+            key={value}
+            onClick={() => {
+              setStrategy(value);
+              localStorage.setItem("dm.dup.strategy", value);
+            }}
+            className={`rounded-lg border px-2.5 py-1 ${strategy === value ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200" : "border-white/10 bg-white/[0.04] text-slate-300"}`}
+          >
+            {label}
           </button>
         ))}
       </div>

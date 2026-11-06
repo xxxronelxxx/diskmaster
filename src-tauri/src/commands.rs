@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
 
+use crate::clean_history::CleanHistoryEntry;
 use crate::state::AppState;
 use crate::types::*;
 use crate::{
@@ -224,7 +225,64 @@ pub struct CleanInput {
 
 #[tauri::command]
 pub async fn clean_junk(input: CleanInput) -> CmdResult<CleanResult> {
-    blocking(move || scan::clean_categories(&input.categories)).await
+    blocking(move || {
+        let result = scan::clean_categories(&input.categories);
+        crate::clean_history::record(
+            "clean",
+            "manual",
+            &input.categories,
+            result.freed_bytes,
+            result.deleted_files,
+            &result.errors,
+        );
+        result
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn preview_clean(input: CleanInput) -> CmdResult<CleanPreview> {
+    blocking(move || CleanPreview {
+        categories: scan::preview_categories(&input.categories, 200),
+    })
+    .await
+}
+
+#[tauri::command]
+pub fn clean_history() -> Vec<CleanHistoryEntry> {
+    crate::clean_history::read(100)
+}
+
+#[derive(Deserialize)]
+pub struct WriteTextInput {
+    pub path: String,
+    pub content: String,
+}
+
+#[tauri::command]
+pub async fn write_text_file(input: WriteTextInput) -> CmdResult<bool> {
+    blocking(move || {
+        let path = std::path::PathBuf::from(&input.path);
+        let allowed = path
+            .extension()
+            .map(|value| {
+                matches!(
+                    value.to_string_lossy().to_lowercase().as_str(),
+                    "csv" | "html" | "json" | "txt"
+                )
+            })
+            .unwrap_or(false);
+        if !allowed {
+            return Err("Недопустимый тип файла для экспорта".to_string());
+        }
+        if input.content.len() > 20 * 1024 * 1024 {
+            return Err("Файл слишком большой для экспорта".to_string());
+        }
+        crate::paths::ensure_parent(&path);
+        std::fs::write(&path, input.content).map_err(|error| error.to_string())?;
+        Ok::<bool, String>(true)
+    })
+    .await?
 }
 
 #[derive(Deserialize)]
@@ -292,7 +350,23 @@ pub async fn folder_delete(
     input: DeletePathsInput,
 ) -> CmdResult<DeleteResult> {
     let shared = state.inner().clone();
-    blocking(move || folders::delete(&shared, &input.paths, input.permanent)).await
+    blocking(move || {
+        let result = folders::delete(&shared, &input.paths, input.permanent);
+        crate::clean_history::record(
+            if input.permanent {
+                "delete-permanent"
+            } else {
+                "delete-to-recycle"
+            },
+            "manual",
+            &[],
+            result.bytes,
+            result.files,
+            &result.errors,
+        );
+        result
+    })
+    .await
 }
 
 /* -------------------------------- duplicates ------------------------------- */
@@ -302,6 +376,8 @@ pub async fn folder_delete(
 pub struct DuplicatesInput {
     pub root: Option<String>,
     pub min_size_kb: Option<f64>,
+    #[serde(default)]
+    pub exclude: Vec<String>,
 }
 
 #[tauri::command]
@@ -311,7 +387,10 @@ pub async fn duplicates_scan(
 ) -> CmdResult<DuplicateScan> {
     let shared = state.inner().clone();
     let input = input.unwrap_or_default();
-    blocking(move || duplicates::scan_duplicates(&shared, input.root, input.min_size_kb)).await
+    blocking(move || {
+        duplicates::scan_duplicates(&shared, input.root, input.min_size_kb, input.exclude)
+    })
+    .await
 }
 
 #[tauri::command]
