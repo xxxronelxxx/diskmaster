@@ -106,6 +106,11 @@ function App() {
     void listen("open-settings", () => setTab("settings")).then((fn) => {
       unlisten = fn;
     });
+    void listen<string>("navigate", (event) => {
+      if (TABS.some((item) => item.id === event.payload)) {
+        setTab(event.payload as TabId);
+      }
+    }).then(() => undefined);
     void api.initialTab().then((value) => {
       if (value && TABS.some((item) => item.id === value)) setTab(value as TabId);
     });

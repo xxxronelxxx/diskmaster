@@ -175,3 +175,8 @@ fn shell_execute(exe: &std::path::Path, parameters: &str, wait: bool) -> Result<
     }
     Ok(exit_code)
 }
+
+/// Launches a module with UAC elevation and waits for it to exit.
+pub fn launch(exe: &std::path::Path, parameters: &str) -> Result<u32, String> {
+    shell_execute(exe, parameters, true)
+}

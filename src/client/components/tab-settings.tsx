@@ -14,6 +14,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   lowDiskCooldownMin: 60,
   quickCleanNotify: true,
   minimizeToTray: true,
+  alwaysAdmin: false,
   protectPaths: [],
   hotkeyShow: "CmdOrCtrl+Alt+D",
   hotkeyWidget: "CmdOrCtrl+Alt+W",
@@ -75,7 +76,9 @@ export function SettingsTab() {
     setError(null);
     try {
       const saved = await saveMutation.mutateAsync(draft);
-      if (saved.hotkeyErrors.length > 0) {
+      if (saved.startupError) {
+        setError(saved.startupError);
+      } else if (saved.hotkeyErrors.length > 0) {
         setError(`Не удалось зарегистрировать: ${saved.hotkeyErrors.join("; ")}`);
       } else {
         setNotice("Настройки сохранены");
@@ -149,7 +152,9 @@ export function SettingsTab() {
       if (typeof selected !== "string") return;
       const imported = await importMutation.mutateAsync(selected);
       setDraft(imported.settings);
-      if (imported.hotkeyErrors.length > 0) {
+      if (imported.startupError) {
+        setError(imported.startupError);
+      } else if (imported.hotkeyErrors.length > 0) {
         setError(`Не удалось зарегистрировать: ${imported.hotkeyErrors.join("; ")}`);
       } else {
         setNotice("Настройки импортированы");
@@ -370,13 +375,27 @@ export function SettingsTab() {
 
           <SettingRow
             title="Запускать при входе в Windows"
-            description="Добавляет приложение в автозапуск текущего пользователя."
+            description="В обычном режиме — ярлык в автозапуске; в режиме администратора — задача Планировщика с повышенными правами."
           >
             <Switch
               label="Запускать при входе в Windows"
               checked={Boolean(state?.autostart)}
               disabled={Boolean(state?.portable) || autostartMutation.isPending}
               onChange={(value) => void toggleAutostart(value)}
+            />
+          </SettingRow>
+
+          <div className="my-2 h-px bg-white/[0.06]" />
+
+          <SettingRow
+            title="Всегда запускать с правами администратора"
+            description="Ручной запуск попросит UAC; автозапуск при входе пойдёт через Планировщик с повышенными правами — без запроса. Применяется после «Сохранить»."
+          >
+            <Switch
+              label="Всегда запускать с правами администратора"
+              checked={settings.alwaysAdmin}
+              disabled={Boolean(state?.portable)}
+              onChange={(value) => patch({ alwaysAdmin: value })}
             />
           </SettingRow>
 

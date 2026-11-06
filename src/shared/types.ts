@@ -407,6 +407,7 @@ export type AppSettings = {
   lowDiskCooldownMin: number;
   quickCleanNotify: boolean;
   minimizeToTray: boolean;
+  alwaysAdmin: boolean;
   protectPaths: string[];
   hotkeyShow: string;
   hotkeyWidget: string;
@@ -417,6 +418,7 @@ export type SettingsState = {
   autostart: boolean;
   portable: boolean;
   hotkeyErrors: string[];
+  startupError: string | null;
 };
 
 /* --------------------------------- sensors -------------------------------- */

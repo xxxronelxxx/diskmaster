@@ -275,14 +275,20 @@ pub struct SettingsState {
     pub autostart: bool,
     pub portable: bool,
     pub hotkey_errors: Vec<String>,
+    pub startup_error: Option<String>,
 }
 
-fn settings_state_value(saved: AppSettings, app: &tauri::AppHandle) -> SettingsState {
+fn settings_state_value(
+    saved: AppSettings,
+    app: &tauri::AppHandle,
+    startup_error: Option<String>,
+) -> SettingsState {
     SettingsState {
         settings: saved,
         autostart: crate::autostart_enabled(),
         portable: crate::paths::is_portable(),
         hotkey_errors: crate::apply_hotkeys(app),
+        startup_error,
     }
 }
 
@@ -293,13 +299,24 @@ pub fn settings_state() -> SettingsState {
         autostart: crate::autostart_enabled(),
         portable: crate::paths::is_portable(),
         hotkey_errors: Vec::new(),
+        startup_error: None,
     }
 }
 
 #[tauri::command]
-pub fn settings_save(input: AppSettings, app: tauri::AppHandle) -> Result<SettingsState, String> {
-    let saved = crate::settings::save(&input)?;
-    Ok(settings_state_value(saved, &app))
+pub async fn settings_save(input: AppSettings, app: tauri::AppHandle) -> CmdResult<SettingsState> {
+    blocking(move || {
+        let previous = crate::settings::current();
+        let saved = crate::settings::save(&input)?;
+        let startup_error =
+            if !crate::paths::is_portable() && previous.always_admin != saved.always_admin {
+                crate::apply_autostart(crate::autostart_enabled(), saved.always_admin).err()
+            } else {
+                None
+            };
+        Ok(settings_state_value(saved, &app, startup_error))
+    })
+    .await?
 }
 
 fn json_target(raw: &str) -> Result<std::path::PathBuf, String> {
@@ -327,12 +344,22 @@ pub fn settings_export(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn settings_import(path: String, app: tauri::AppHandle) -> Result<SettingsState, String> {
-    let target = json_target(&path)?;
-    let raw = std::fs::read_to_string(&target)
-        .map_err(|error| format!("Не удалось прочитать файл: {error}"))?;
-    let saved = crate::settings::import_json(&raw)?;
-    Ok(settings_state_value(saved, &app))
+pub async fn settings_import(path: String, app: tauri::AppHandle) -> CmdResult<SettingsState> {
+    blocking(move || {
+        let target = json_target(&path)?;
+        let raw = std::fs::read_to_string(&target)
+            .map_err(|error| format!("Не удалось прочитать файл: {error}"))?;
+        let previous = crate::settings::current();
+        let saved = crate::settings::import_json(&raw)?;
+        let startup_error =
+            if !crate::paths::is_portable() && previous.always_admin != saved.always_admin {
+                crate::apply_autostart(crate::autostart_enabled(), saved.always_admin).err()
+            } else {
+                None
+            };
+        Ok(settings_state_value(saved, &app, startup_error))
+    })
+    .await?
 }
 
 #[derive(Deserialize)]
@@ -341,18 +368,26 @@ pub struct AutostartInput {
 }
 
 #[tauri::command]
-pub fn autostart_set(input: AutostartInput) -> OkResult {
-    if crate::paths::is_portable() {
-        return OkResult {
-            ok: false,
-            error: Some("Автозапуск недоступен в портативной версии".into()),
-        };
-    }
-    crate::set_autostart(input.enabled);
-    OkResult {
-        ok: true,
-        error: None,
-    }
+pub async fn autostart_set(input: AutostartInput) -> CmdResult<OkResult> {
+    blocking(move || {
+        if crate::paths::is_portable() {
+            return Ok(OkResult {
+                ok: false,
+                error: Some("Автозапуск недоступен в портативной версии".into()),
+            });
+        }
+        match crate::apply_autostart(input.enabled, crate::settings::current().always_admin) {
+            Ok(()) => Ok(OkResult {
+                ok: true,
+                error: None,
+            }),
+            Err(error) => Ok(OkResult {
+                ok: false,
+                error: Some(error),
+            }),
+        }
+    })
+    .await?
 }
 
 #[tauri::command]
@@ -383,6 +418,7 @@ pub fn notification_test(app: tauri::AppHandle) -> OkResult {
         .builder()
         .title("Диск-Мастер")
         .body("Уведомления работают.")
+        .extra("tab", "settings")
         .show()
     {
         Ok(()) => OkResult {

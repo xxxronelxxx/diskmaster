@@ -227,6 +227,8 @@ namespace DiskMasterSensors
                 if (amd != null)
                     readings.Add(amd);
 
+                KeepPrimaryDiskTemperature(readings);
+
                 return readings
                     .OrderBy(reading => reading.Kind == "temperature" ? 0 : 1)
                     .ThenBy(reading => reading.Hardware)
@@ -237,6 +239,38 @@ namespace DiskMasterSensors
             public void Dispose()
             {
                 try { _computer.Close(); } catch { }
+            }
+        }
+
+        /// <summary>
+        /// A drive often exposes a composite (controller) value and several
+        /// NAND sensors. Users need one clear number, so keep the composite and
+        /// drop the extra sensors; if there is no composite, promote the first.
+        /// </summary>
+        private static void KeepPrimaryDiskTemperature(List<Reading> readings)
+        {
+            var groups = readings
+                .Where(reading => reading.Kind == "temperature" && reading.HardwareType == "Storage")
+                .GroupBy(reading => reading.Hardware)
+                .ToList();
+
+            foreach (var group in groups)
+            {
+                var items = group.ToList();
+                var main = items.FirstOrDefault(reading => reading.Name == "Температура накопителя");
+                if (main == null && items.Count > 0)
+                {
+                    main = items[0];
+                    main.Name = "Температура накопителя";
+                }
+                if (main == null)
+                    continue;
+
+                foreach (var extra in items)
+                {
+                    if (!ReferenceEquals(extra, main))
+                        readings.Remove(extra);
+                }
             }
         }
 

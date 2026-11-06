@@ -26,6 +26,8 @@ mod win_text;
 mod winget;
 mod wmi_time;
 
+use std::os::windows::process::CommandExt;
+use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 
 use serde::{Deserialize, Serialize};
@@ -53,26 +55,161 @@ fn show_main(app: &AppHandle) {
     }
 }
 
-pub fn autostart_enabled() -> bool {
-    RegKey::predef(HKEY_CURRENT_USER)
-        .open_subkey_with_flags(AUTOSTART_KEY, KEY_READ)
-        .ok()
-        .and_then(|key| key.get_value::<String, _>(AUTOSTART_NAME).ok())
-        .is_some()
+const AUTOSTART_TASK: &str = "DiskMasterAutostart";
+
+fn is_elevated() -> bool {
+    unsafe { windows_sys::Win32::UI::Shell::IsUserAnAdmin() != 0 }
 }
 
-pub fn set_autostart(enabled: bool) {
+fn quote_arg(value: &str) -> String {
+    format!("\"{}\"", value.replace('"', "\\\""))
+}
+
+fn schtasks_path() -> std::path::PathBuf {
+    paths::system_root().join("System32").join("schtasks.exe")
+}
+
+fn task_exists() -> bool {
+    Command::new(schtasks_path())
+        .args(["/Query", "/TN", AUTOSTART_TASK])
+        .creation_flags(0x0800_0000)
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn task_command() -> String {
+    let exe = std::env::current_exe().unwrap_or_default();
+    format!("\"{}\" --hidden", exe.to_string_lossy())
+}
+
+fn run_schtasks(args: &[String]) -> Result<(), String> {
+    let path = schtasks_path();
+    if is_elevated() {
+        let status = Command::new(&path)
+            .args(args)
+            .creation_flags(0x0800_0000)
+            .status()
+            .map_err(|error| format!("schtasks: {error}"))?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!("schtasks завершился с кодом {:?}", status.code()))
+        }
+    } else {
+        let line = args
+            .iter()
+            .map(|arg| {
+                if arg.contains(' ') || arg.contains('"') {
+                    quote_arg(arg)
+                } else {
+                    arg.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        let code = elevated::launch(&path, &line)?;
+        if code == 0 {
+            Ok(())
+        } else {
+            Err(format!("schtasks завершился с кодом {code}"))
+        }
+    }
+}
+
+fn create_task(always_admin: bool) -> Result<(), String> {
+    let mut args = vec![
+        "/Create".to_string(),
+        "/TN".into(),
+        AUTOSTART_TASK.into(),
+        "/TR".into(),
+        task_command(),
+        "/SC".into(),
+        "ONLOGON".into(),
+        "/F".into(),
+    ];
+    if always_admin {
+        args.push("/RL".into());
+        args.push("HIGHEST".into());
+    }
+    run_schtasks(&args)
+}
+
+fn delete_task() -> Result<(), String> {
+    if !task_exists() {
+        return Ok(());
+    }
+    run_schtasks(&[
+        "/Delete".to_string(),
+        "/TN".into(),
+        AUTOSTART_TASK.into(),
+        "/F".into(),
+    ])
+}
+
+fn write_run_key() {
     let Ok(key) = RegKey::predef(HKEY_CURRENT_USER)
         .open_subkey_with_flags(AUTOSTART_KEY, KEY_READ | KEY_WRITE)
     else {
         return;
     };
-    if enabled {
-        let exe = std::env::current_exe().unwrap_or_default();
-        let command = format!("\"{}\" --hidden", exe.to_string_lossy());
-        let _ = key.set_value(AUTOSTART_NAME, &command);
-    } else {
+    let exe = std::env::current_exe().unwrap_or_default();
+    let command = format!("\"{}\" --hidden", exe.to_string_lossy());
+    let _ = key.set_value(AUTOSTART_NAME, &command);
+}
+
+fn remove_run_key() {
+    if let Ok(key) = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey_with_flags(AUTOSTART_KEY, KEY_READ | KEY_WRITE)
+    {
         let _ = key.delete_value(AUTOSTART_NAME);
+    }
+}
+
+pub fn autostart_enabled() -> bool {
+    let run_key = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey_with_flags(AUTOSTART_KEY, KEY_READ)
+        .ok()
+        .and_then(|key| key.get_value::<String, _>(AUTOSTART_NAME).ok())
+        .is_some();
+    run_key || task_exists()
+}
+
+/// Applies the startup policy: a plain Run key for normal autostart, or a
+/// highest-privilege scheduled task when the user wants the app to start as
+/// administrator without a UAC prompt at logon.
+pub fn apply_autostart(enabled: bool, always_admin: bool) -> Result<(), String> {
+    if always_admin {
+        remove_run_key();
+        if enabled {
+            create_task(true)
+        } else {
+            delete_task()
+        }
+    } else if enabled {
+        delete_task()?;
+        write_run_key();
+        Ok(())
+    } else {
+        remove_run_key();
+        delete_task()
+    }
+}
+
+fn message_box(text: &str) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+    let text: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
+    let title: Vec<u16> = "Диск-Мастер"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    unsafe {
+        MessageBoxW(
+            std::ptr::null_mut(),
+            text.as_ptr(),
+            title.as_ptr(),
+            MB_OK | MB_ICONERROR,
+        );
     }
 }
 
@@ -80,8 +217,14 @@ fn format_gb(bytes: u64) -> String {
     format!("{:.1} ГБ", bytes as f64 / 1024f64.powi(3))
 }
 
-fn notify(app: &AppHandle, title: &str, body: &str) {
-    let _ = app.notification().builder().title(title).body(body).show();
+fn notify(app: &AppHandle, title: &str, body: &str, tab: &str) {
+    let _ = app
+        .notification()
+        .builder()
+        .title(title)
+        .body(body)
+        .extra("tab", tab)
+        .show();
 }
 
 fn toggle_widget(app: &AppHandle) {
@@ -172,6 +315,7 @@ fn start_disk_watch(app: AppHandle) {
                         format_gb(drive.total),
                         free_percent.round() as u32
                     ),
+                    "cleanup",
                 );
             }
             if !low {
@@ -348,6 +492,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                                 format_gb(result.freed_bytes),
                                 result.deleted_files
                             ),
+                            "cleanup",
                         );
                     }
                 });
@@ -365,8 +510,10 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                     return;
                 }
                 let next = !autostart_enabled();
-                set_autostart(next);
-                logging::log(&format!("autostart -> {next}"));
+                match apply_autostart(next, settings::current().always_admin) {
+                    Ok(()) => logging::log(&format!("autostart -> {next}")),
+                    Err(error) => logging::log(&format!("autostart failed: {error}")),
+                }
                 if let Some(tray) = app.tray_by_id("main-tray") {
                     if let Ok(menu) = build_menu(app) {
                         let _ = tray.set_menu(Some(menu));
@@ -422,6 +569,34 @@ fn main() {
     if std::env::args().any(|value| value == "--run-scheduled-clean") {
         run_headless_clean();
         return;
+    }
+
+    let loaded_settings = settings::init();
+    if loaded_settings.always_admin
+        && !is_elevated()
+        && !std::env::args().any(|value| value == "--elevated")
+    {
+        let Ok(exe) = std::env::current_exe() else {
+            return;
+        };
+        let mut parameters: Vec<String> = std::env::args().skip(1).collect();
+        parameters.push("--elevated".into());
+        let line = parameters
+            .iter()
+            .map(|argument| quote_arg(argument))
+            .collect::<Vec<_>>()
+            .join(" ");
+        match elevated::launch_detached(&exe, &line) {
+            Ok(()) => return,
+            Err(error) => {
+                message_box(&format!(
+                    "Для запуска с правами администратора нужно подтвердить запрос UAC.
+
+{error}"
+                ));
+                return;
+            }
+        }
     }
 
     let initial_tab = arg_value("tab").or_else(|| {
@@ -571,6 +746,24 @@ fn main() {
             widget::migrate_autostart();
 
             settings::init();
+
+            // Clicks on our toasts carry the target tab in the notification
+            // payload and open the matching section in the running window.
+            let action_app = app.handle().clone();
+            let _ = app.notification().on_action(move |action| {
+                if action.action_id() != "tap" {
+                    return;
+                }
+                let tab = action
+                    .notification()
+                    .and_then(|notification| notification.extra().get("tab"))
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("overview")
+                    .to_string();
+                show_main(&action_app);
+                let _ = action_app.emit("navigate", tab);
+            });
+
             let hotkey_errors = apply_hotkeys(app.handle());
             if hotkey_errors.is_empty() {
                 let current = settings::current();
@@ -584,8 +777,9 @@ fn main() {
             start_disk_watch(app.handle().clone());
 
             // Sensors are started automatically on a normal launch. A hidden
-            // autostart run stays silent to avoid an unexpected UAC at logon.
-            if !hidden {
+            // autostart run stays silent unless the app already runs elevated
+            // (the always-administrator task), where no UAC is involved.
+            if !hidden || is_elevated() {
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_millis(2500));
                     let state = sensors::state();

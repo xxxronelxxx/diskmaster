@@ -1,6 +1,6 @@
 [package]
 name = "disk-master"
-version = "1.7.2"
+version = "1.7.3"
 description = "Очистка диска, анализ места и мониторинг Windows"
 authors = ["Development SPB"]
 edition = "2021"

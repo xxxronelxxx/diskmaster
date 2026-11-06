@@ -127,11 +127,6 @@ export function SensorsPanel({ wmiSensors }: { wmiSensors: SensorInfo[] }) {
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <GaugeIcon className="size-4 text-emerald-300" />
         <p className="text-sm font-medium text-white">Температуры и кулеры</p>
-        {state?.running ? (
-          <Badge variant="success">
-            {state.pawnioInstalled ? `PawnIO ${state.pawnioVersion ?? ""}`.trim() : "без драйвера"}
-          </Badge>
-        ) : null}
       </div>
 
       {!state ? (

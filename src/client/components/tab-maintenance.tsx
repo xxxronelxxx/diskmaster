@@ -124,180 +124,184 @@ export function MaintenanceTab() {
       ) : null}
 
       <div className="grid items-start gap-4 xl:grid-cols-2">
-        <Card className="p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <ShieldIcon className="size-4 text-emerald-300" />
-            <p className="text-sm font-medium text-white">Здоровье дисков</p>
-          </div>
-          {!status?.disks.length ? (
-            <p className="text-xs text-slate-500">Нет данных SMART/WMI.</p>
-          ) : (
-            <div className="space-y-2">
-              {status.disks.map((disk) => {
-                const health = healthLabel(disk.health);
-                return (
-                  <div key={disk.deviceId} className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-2.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="truncate text-xs font-medium text-slate-100">{disk.name}</p>
-                      <Badge variant={health.variant}>{health.text}</Badge>
-                    </div>
-                    <p className="mt-1 text-[11px] text-slate-500">
-                      {mediaLabel(disk.mediaType)} · {formatBytes(disk.size, 0)}
-                      {disk.temperature !== null ? ` · ${disk.temperature} °C` : ""}
-                      {disk.wear !== null ? ` · износ ${disk.wear}%` : ""}
-                      {disk.powerOnHours !== null ? ` · ${disk.powerOnHours} ч` : ""}
-                    </p>
-                  </div>
-                );
-              })}
+        <div className="space-y-4">
+          <Card className="p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <ShieldIcon className="size-4 text-emerald-300" />
+              <p className="text-sm font-medium text-white">Здоровье дисков</p>
             </div>
-          )}
-        </Card>
+            {!status?.disks.length ? (
+              <p className="text-xs text-slate-500">Нет данных SMART/WMI.</p>
+            ) : (
+              <div className="space-y-2">
+                {status.disks.map((disk) => {
+                  const health = healthLabel(disk.health);
+                  return (
+                    <div key={disk.deviceId} className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-xs font-medium text-slate-100">{disk.name}</p>
+                        <Badge variant={health.variant}>{health.text}</Badge>
+                      </div>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        {mediaLabel(disk.mediaType)} · {formatBytes(disk.size, 0)}
+                        {disk.temperature !== null ? ` · ${disk.temperature} °C` : ""}
+                        {disk.wear !== null ? ` · износ ${disk.wear}%` : ""}
+                        {disk.powerOnHours !== null ? ` · ${disk.powerOnHours} ч` : ""}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
 
-        <SensorsPanel wmiSensors={status?.sensors ?? []} />
-
-        <Card className="p-4">
-          <p className="text-sm font-medium text-white">Windows.old</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
-            Удаляет папку предыдущей установки Windows. Освобождает обычно 5–20 ГБ,
-            откат на старую версию после этого невозможен.
-          </p>
-          <Button
-            className="mt-3"
-            size="sm"
-            variant="danger"
-            onClick={() =>
-              setPending({
-                op: "windows_old",
-                title: "Удалить Windows.old?",
-                description: "Откат к предыдущей версии Windows станет невозможен.",
-                danger: true,
-              })
-            }
-          >
-            <TrashIcon className="size-4" />
-            Удалить Windows.old
-          </Button>
-        </Card>
-
-        <Card className="p-4">
-          <p className="text-sm font-medium text-white">WinSxS (DISM)</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
-            Запускает DISM StartComponentCleanup. Может занять 10–30 минут; файлы
-            WinSxS вручную не удаляются.
-          </p>
-          <Button
-            className="mt-3"
-            size="sm"
-            variant="secondary"
-            onClick={() =>
-              setPending({
-                op: "dism_cleanup",
-                title: "Очистить WinSxS?",
-                description: "DISM выполнит очистку компонентов. Это может занять длительное время.",
-              })
-            }
-          >
-            Запустить DISM
-          </Button>
-        </Card>
-
-        <Card className="p-4">
-          <p className="text-sm font-medium text-white">Точки восстановления</p>
-          {points.length ? (
-            <div className="mt-2 max-h-40 space-y-1 overflow-auto">
-              {points.map((point) => (
-                <div key={point.sequence} className="flex items-center justify-between gap-2 text-[11px]">
-                  <span className="truncate text-slate-300">{point.description ?? `Точка ${point.sequence}`}</span>
-                  <span className="shrink-0 text-slate-500">{point.createdAt ? formatDate(point.createdAt) : ""}</span>
-                </div>
+          <Card className="p-4">
+            <p className="text-sm font-medium text-white">Системные категории от администратора</p>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Очистка Temp Windows, кэша обновлений, Delivery Optimization, Prefetch и логов.
+            </p>
+            <div className="mt-2 grid grid-cols-2 gap-1">
+              {ADMIN_CATEGORIES.map(([id, label]) => (
+                <label key={id} className="flex items-center gap-2 text-[11px] text-slate-300">
+                  <input
+                    type="checkbox"
+                    className="size-3.5 accent-emerald-500"
+                    checked={categories.includes(id)}
+                    onChange={(event) =>
+                      setCategories((current) =>
+                        event.target.checked ? [...current, id] : current.filter((value) => value !== id),
+                      )
+                    }
+                  />
+                  {label}
+                </label>
               ))}
             </div>
-          ) : (
-            <p className="mt-2 text-[11px] text-slate-500">Точки восстановления не найдены.</p>
-          )}
-          <div className="mt-3 flex flex-wrap gap-2">
             <Button
+              className="mt-3"
               size="sm"
-              variant="secondary"
-              onClick={() => void loadRestorePoints()}
-              loading={operation.isPending}
+              variant="danger"
+              disabled={categories.length === 0}
+              onClick={() =>
+                setPending({
+                  op: "clean_system",
+                  payload: { categories },
+                  title: "Очистить системные категории?",
+                  description: "Файлы будут удалены безвозвратно, потребуется UAC.",
+                  danger: true,
+                })
+              }
             >
-              Загрузить список (UAC)
+              Очистить от администратора
             </Button>
+          </Card>
+
+          <Card className="p-4">
+            <p className="text-sm font-medium text-white">Точки восстановления</p>
+            {points.length ? (
+              <div className="mt-2 max-h-40 space-y-1 overflow-auto">
+                {points.map((point) => (
+                  <div key={point.sequence} className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="truncate text-slate-300">{point.description ?? `Точка ${point.sequence}`}</span>
+                    <span className="shrink-0 text-slate-500">{point.createdAt ? formatDate(point.createdAt) : ""}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-[11px] text-slate-500">Точки восстановления не найдены.</p>
+            )}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => void loadRestorePoints()}
+                loading={operation.isPending}
+              >
+                Загрузить список (UAC)
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() =>
+                  setPending({
+                    op: "restore_point_create",
+                    title: "Создать точку восстановления?",
+                    description: "Windows создаст точку восстановления системы (потребуется UAC).",
+                  })
+                }
+              >
+                Создать точку
+              </Button>
+              {oldest ? (
+                <Button
+                  size="sm"
+                  variant="danger"
+                  onClick={() =>
+                    setPending({
+                      op: "restore_point_delete",
+                      payload: { sequence: oldest.sequence },
+                      title: "Удалить старую точку?",
+                      description: `Будет удалена точка №${oldest.sequence}.`,
+                      danger: true,
+                    })
+                  }
+                >
+                  Удалить старую
+                </Button>
+              ) : null}
+            </div>
+          </Card>
+        </div>
+
+        <div className="space-y-4">
+          <SensorsPanel wmiSensors={status?.sensors ?? []} />
+
+          <Card className="p-4">
+            <p className="text-sm font-medium text-white">Windows.old</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+              Удаляет папку предыдущей установки Windows. Освобождает обычно 5–20 ГБ,
+              откат на старую версию после этого невозможен.
+            </p>
             <Button
+              className="mt-3"
+              size="sm"
+              variant="danger"
+              onClick={() =>
+                setPending({
+                  op: "windows_old",
+                  title: "Удалить Windows.old?",
+                  description: "Откат к предыдущей версии Windows станет невозможен.",
+                  danger: true,
+                })
+              }
+            >
+              <TrashIcon className="size-4" />
+              Удалить Windows.old
+            </Button>
+          </Card>
+
+          <Card className="p-4">
+            <p className="text-sm font-medium text-white">WinSxS (DISM)</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+              Запускает DISM StartComponentCleanup. Может занять 10–30 минут; файлы
+              WinSxS вручную не удаляются.
+            </p>
+            <Button
+              className="mt-3"
               size="sm"
               variant="secondary"
               onClick={() =>
                 setPending({
-                  op: "restore_point_create",
-                  title: "Создать точку восстановления?",
-                  description: "Windows создаст точку восстановления системы (потребуется UAC).",
+                  op: "dism_cleanup",
+                  title: "Очистить WinSxS?",
+                  description: "DISM выполнит очистку компонентов. Это может занять длительное время.",
                 })
               }
             >
-              Создать точку
+              Запустить DISM
             </Button>
-            {oldest ? (
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={() =>
-                  setPending({
-                    op: "restore_point_delete",
-                    payload: { sequence: oldest.sequence },
-                    title: "Удалить старую точку?",
-                    description: `Будет удалена точка №${oldest.sequence}.`,
-                    danger: true,
-                  })
-                }
-              >
-                Удалить старую
-              </Button>
-            ) : null}
-          </div>
-        </Card>
-
-        <Card className="p-4">
-          <p className="text-sm font-medium text-white">Системные категории от администратора</p>
-          <p className="mt-1 text-[11px] text-slate-500">
-            Очистка Temp Windows, кэша обновлений, Delivery Optimization, Prefetch и логов.
-          </p>
-          <div className="mt-2 grid grid-cols-2 gap-1">
-            {ADMIN_CATEGORIES.map(([id, label]) => (
-              <label key={id} className="flex items-center gap-2 text-[11px] text-slate-300">
-                <input
-                  type="checkbox"
-                  className="size-3.5 accent-emerald-500"
-                  checked={categories.includes(id)}
-                  onChange={(event) =>
-                    setCategories((current) =>
-                      event.target.checked ? [...current, id] : current.filter((value) => value !== id),
-                    )
-                  }
-                />
-                {label}
-              </label>
-            ))}
-          </div>
-          <Button
-            className="mt-3"
-            size="sm"
-            variant="danger"
-            disabled={categories.length === 0}
-            onClick={() =>
-              setPending({
-                op: "clean_system",
-                payload: { categories },
-                title: "Очистить системные категории?",
-                description: "Файлы будут удалены безвозвратно, потребуется UAC.",
-                danger: true,
-              })
-            }
-          >
-            Очистить от администратора
-          </Button>
-        </Card>
+          </Card>
+        </div>
       </div>
 
       {!status && !statusQuery.isLoading ? (
