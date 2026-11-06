@@ -200,7 +200,7 @@ export function WidgetView() {
                 <span className="tabular-nums">
                   {cpuTemp !== null ? `CPU ${cpuTemp.toFixed(0)}°` : ""}
                   {cpuTemp !== null && diskTemp !== null ? " · " : ""}
-                  {diskTemp !== null ? `диск ${diskTemp.toFixed(0)}°` : ""}
+                  {diskTemp !== null ? `${t("диск")} ${diskTemp.toFixed(0)}°` : ""}
                 </span>
               </div>
             ) : null}

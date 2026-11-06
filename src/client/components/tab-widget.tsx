@@ -459,7 +459,7 @@ export function WidgetTab() {
                     }
                     className="flex w-full items-center justify-between rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2 text-left text-xs text-slate-300 transition-colors hover:bg-white/[0.06]"
                   >
-                    <span>{preset.label}</span>
+                    <span>{t(preset.label)}</span>
                     <span className="text-[10px] text-slate-500">
                       {preset.width}×{preset.height}
                     </span>
