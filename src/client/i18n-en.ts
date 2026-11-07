@@ -321,6 +321,8 @@ export const EN_TRANSLATIONS: Record<string, string> = {
   "Пока нет очисток за последние 30 дней.": "No cleanups in the last 30 days.",
   "файлов · очисток:": "files · cleanups:",
   "Последняя: {date}": "Last: {date}",
+  "Сводка": "Summary",
+  "Дисков: {count} · занято {used}": "Drives: {count} · {used} used",
   "Дата": "Date",
   "Направление сортировки": "Sort direction",
   "Резервная копия драйверов старше 90 дней. Последняя: {date}": "The driver backup is older than 90 days. Last: {date}",

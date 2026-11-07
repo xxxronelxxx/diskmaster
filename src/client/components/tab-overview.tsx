@@ -99,6 +99,34 @@ function DriveCard({
   );
 }
 
+function DrivesSummaryCard({ drives }: { drives: SystemInfo["drives"] }) {
+  const total = drives.reduce((sum, drive) => sum + drive.total, 0);
+  const used = drives.reduce((sum, drive) => sum + drive.used, 0);
+  const free = drives.reduce((sum, drive) => sum + drive.free, 0);
+  const percent = usedPercent(used, total);
+  return (
+    <Card className="flex flex-col p-4">
+      <div className="flex items-center gap-2">
+        <GaugeIcon className="size-4 text-slate-400" />
+        <h3 className="text-sm font-medium text-white">{t("Сводка")}</h3>
+      </div>
+      <div className="mt-3 flex flex-1 items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-2xl font-semibold tabular-nums text-white">{formatBytes(free, 0)}</p>
+          <p className="mt-0.5 text-[11px] text-slate-500">
+            {t("свободно")} {t("из")} {formatBytes(total, 0)}
+          </p>
+        </div>
+        <span className="text-sm font-semibold tabular-nums text-slate-300">{percent}%</span>
+      </div>
+      <Progress className="mt-3" value={percent} tone={driveTone(percent)} />
+      <p className="mt-2 text-[11px] text-slate-500">
+        {t("Дисков: {count} · занято {used}", { count: drives.length, used: formatBytes(used, 0) })}
+      </p>
+    </Card>
+  );
+}
+
 function Stat({
   icon,
   label,
@@ -208,6 +236,7 @@ export function OverviewTab({
             forecast={forecastFor(drive.letter, points, drive.free)}
           />
         ))}
+        {info.drives.length % 2 === 1 ? <DrivesSummaryCard drives={info.drives} /> : null}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
