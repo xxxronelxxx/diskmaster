@@ -474,6 +474,50 @@ export type MaintenanceStatus = {
   elevated: boolean;
 };
 
+/* -------------------------------- drivers --------------------------------- */
+
+export type DriverPackage = {
+  publishedName: string;
+  originalName: string;
+  provider: string;
+  className: string;
+  classGuid: string;
+  date: string;
+  version: string;
+  signer: string;
+};
+
+export type DriverOpResult = {
+  name: string;
+  ok: boolean;
+  code: number | null;
+  reboot: boolean;
+  output: string;
+};
+
+export type BackupDriverFile = {
+  relativePath: string;
+  size: number;
+  modified: number | null;
+};
+
+export type DriverBackupManifest = {
+  appVersion: string;
+  createdAt: number;
+  packages: DriverPackage[];
+};
+
+export type DriverBackupScan = {
+  root: string;
+  manifest: DriverBackupManifest | null;
+  files: BackupDriverFile[];
+};
+
+export type DriverExportResult = {
+  path: string;
+  items: DriverOpResult[];
+};
+
 /* -------------------------------- settings -------------------------------- */
 
 export type AppSettings = {

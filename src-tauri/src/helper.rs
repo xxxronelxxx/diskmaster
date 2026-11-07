@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
+mod drivers;
 mod smart;
 mod wmi_time;
 
@@ -51,6 +52,9 @@ fn main() {
         "restore_point_delete" => restore_point_delete(&payload),
         "clean_system" => clean_system(&payload),
         "smart" => smart_result(),
+        "drivers_list" => drivers_list(),
+        "drivers_export" => drivers_export(&payload),
+        "drivers_restore" => drivers_restore(&payload),
         _ => Output {
             ok: false,
             message: format!("Неизвестная операция: {operation}"),
@@ -66,6 +70,69 @@ fn main() {
     // Exit explicitly: COM/WMI teardown during process shutdown can block after
     // a successful query, which would leave the main app waiting forever.
     std::process::exit(if result.ok { 0 } else { 1 });
+}
+
+#[derive(Deserialize)]
+struct DriversExportInput {
+    path: String,
+    #[serde(default)]
+    infs: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct DriversRestoreInput {
+    root: String,
+    #[serde(default)]
+    infs: Vec<String>,
+}
+
+fn drivers_list() -> Output {
+    match drivers::list_text() {
+        Ok(text) => ok("Список драйверов получен", json!({ "text": text })),
+        Err(error) => fail(error),
+    }
+}
+
+fn drivers_export(payload: &Value) -> Output {
+    let input: DriversExportInput = match serde_json::from_value(payload.clone()) {
+        Ok(input) => input,
+        Err(error) => return fail(format!("Некорректный запрос: {error}")),
+    };
+    match drivers::export(std::path::Path::new(&input.path), &input.infs) {
+        Ok(items) => {
+            let failed = items.iter().filter(|item| !item.ok).count();
+            ok(
+                if failed == 0 {
+                    format!("Экспортировано: {}", items.len())
+                } else {
+                    format!("Экспорт завершён, ошибок: {failed}")
+                },
+                json!({ "items": items }),
+            )
+        }
+        Err(error) => fail(error),
+    }
+}
+
+fn drivers_restore(payload: &Value) -> Output {
+    let input: DriversRestoreInput = match serde_json::from_value(payload.clone()) {
+        Ok(input) => input,
+        Err(error) => return fail(format!("Некорректный запрос: {error}")),
+    };
+    match drivers::restore(&input.root, &input.infs) {
+        Ok(items) => {
+            let failed = items.iter().filter(|item| !item.ok).count();
+            ok(
+                if failed == 0 {
+                    format!("Восстановлено: {}", items.len())
+                } else {
+                    format!("Восстановление завершено, ошибок: {failed}")
+                },
+                json!({ "items": items }),
+            )
+        }
+        Err(error) => fail(error),
+    }
 }
 
 fn smart_result() -> Output {

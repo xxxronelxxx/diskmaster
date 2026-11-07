@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
 
 use crate::clean_history::CleanHistoryEntry;
+use crate::drivers::{DriverBackupScan, DriverExportResult, DriverOpResult, DriverPackage};
 use crate::maintenance::{self, MaintenanceStatus};
 use crate::sensors::{self, SensorsState};
 use crate::settings::AppSettings;
@@ -543,6 +544,104 @@ pub async fn process_suspend(input: SuspendInput) -> CmdResult<OkResult> {
 #[tauri::command]
 pub fn clean_history() -> Vec<CleanHistoryEntry> {
     crate::clean_history::read(100)
+}
+
+#[tauri::command]
+pub fn drivers_list() -> CmdResult<Vec<DriverPackage>> {
+    match crate::drivers::list() {
+        Ok(packages) => Ok(packages),
+        Err(direct_error) => {
+            let response = crate::elevated::run("drivers_list", serde_json::json!({}))?;
+            if response.get("ok").and_then(|value| value.as_bool()) == Some(false) {
+                return Err(response
+                    .get("message")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("Не удалось получить список драйверов")
+                    .to_string());
+            }
+            let text = response
+                .get("data")
+                .and_then(|value| value.get("text"))
+                .and_then(|value| value.as_str())
+                .ok_or_else(|| format!("Нет данных от pnputil: {direct_error}"))?;
+            crate::drivers::parse_list(text)
+        }
+    }
+}
+
+#[tauri::command]
+pub fn drivers_scan_backup(path: String) -> CmdResult<DriverBackupScan> {
+    crate::drivers::scan_backup(&path)
+}
+
+#[tauri::command]
+pub fn drivers_export(parent: String, infs: Vec<String>) -> CmdResult<DriverExportResult> {
+    let backup = crate::drivers::prepare_backup_dir(&parent)?;
+    let items = if crate::smart::is_elevated() {
+        crate::drivers::export(&backup, &infs)?
+    } else {
+        let response = crate::elevated::run(
+            "drivers_export",
+            serde_json::json!({
+                "path": backup.to_string_lossy(),
+                "infs": infs,
+            }),
+        )?;
+        if response.get("ok").and_then(|value| value.as_bool()) == Some(false) {
+            return Err(response
+                .get("message")
+                .and_then(|value| value.as_str())
+                .unwrap_or("Не удалось экспортировать драйверы")
+                .to_string());
+        }
+        response
+            .get("data")
+            .and_then(|value| value.get("items"))
+            .cloned()
+            .and_then(|value| serde_json::from_value::<Vec<DriverOpResult>>(value).ok())
+            .unwrap_or_default()
+    };
+
+    let packages = crate::drivers::list().unwrap_or_default();
+    let selected: Vec<DriverPackage> = packages
+        .into_iter()
+        .filter(|package| {
+            infs.is_empty()
+                || infs
+                    .iter()
+                    .any(|name| name.eq_ignore_ascii_case(&package.published_name))
+        })
+        .collect();
+    let _ = crate::drivers::write_manifest(&backup, selected);
+
+    Ok(DriverExportResult {
+        path: crate::drivers::display_path(&backup),
+        items,
+    })
+}
+
+#[tauri::command]
+pub fn drivers_restore(root: String, infs: Vec<String>) -> CmdResult<Vec<DriverOpResult>> {
+    if crate::smart::is_elevated() {
+        return crate::drivers::restore(&root, &infs);
+    }
+    let response = crate::elevated::run(
+        "drivers_restore",
+        serde_json::json!({ "root": root, "infs": infs }),
+    )?;
+    if response.get("ok").and_then(|value| value.as_bool()) == Some(false) {
+        return Err(response
+            .get("message")
+            .and_then(|value| value.as_str())
+            .unwrap_or("Не удалось восстановить драйверы")
+            .to_string());
+    }
+    Ok(response
+        .get("data")
+        .and_then(|value| value.get("items"))
+        .cloned()
+        .and_then(|value| serde_json::from_value::<Vec<DriverOpResult>>(value).ok())
+        .unwrap_or_default())
 }
 
 #[tauri::command]

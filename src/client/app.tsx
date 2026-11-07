@@ -15,6 +15,7 @@ import {
   SettingsIcon,
   ShieldIcon,
   SparkleIcon,
+  DriverIcon,
   SunIcon,
 } from "./components/icons";
 import { Badge } from "./components/ui";
@@ -30,6 +31,7 @@ import { StartupTab } from "./components/tab-startup";
 import { ScheduleTab } from "./components/tab-schedule";
 import { HistoryTab } from "./components/tab-history";
 import { MaintenanceTab } from "./components/tab-maintenance";
+import { DriversTab } from "./components/tab-drivers";
 import { SettingsTab } from "./components/tab-settings";
 import { WidgetTab } from "./components/tab-widget";
 import { UpdateBanner } from "./components/update-banner";
@@ -51,6 +53,7 @@ type TabId =
   | "schedule"
   | "history"
   | "maintenance"
+  | "drivers"
   | "widget"
   | "settings";
 
@@ -66,6 +69,7 @@ const TABS: TabDef[] = [
   { id: "monitor", label: "Мониторинг", icon: GaugeIcon, group: "Система" },
   { id: "history", label: "История места", icon: RefreshIcon, group: "Система" },
   { id: "maintenance", label: "Обслуживание", icon: ShieldIcon, group: "Система" },
+  { id: "drivers", label: "Драйверы", icon: DriverIcon, group: "Система" },
   { id: "cleanup", label: "Очистка", icon: SparkleIcon, group: "Освободить место" },
   { id: "folders", label: "Анализ диска", icon: FilesIcon, group: "Освободить место" },
   { id: "files", label: "Большие файлы", icon: FilesIcon, group: "Освободить место" },
@@ -358,6 +362,7 @@ function App() {
             {tab === "monitor" ? <MonitorTab /> : null}
             {tab === "history" ? <HistoryTab /> : null}
             {tab === "maintenance" ? <MaintenanceTab /> : null}
+            {tab === "drivers" ? <DriversTab /> : null}
 
             {tab === "cleanup" ? (
               <CleanupTab

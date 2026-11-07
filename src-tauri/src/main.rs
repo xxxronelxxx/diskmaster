@@ -2,6 +2,7 @@
 
 mod clean_history;
 mod commands;
+mod drivers;
 mod duplicates;
 mod elevated;
 mod folders;
@@ -782,6 +783,10 @@ fn main() {
             commands::sensors_install,
             commands::smart_read,
             commands::smart_history,
+            commands::drivers_list,
+            commands::drivers_scan_backup,
+            commands::drivers_export,
+            commands::drivers_restore,
             commands::copy_text,
             commands::initial_tab,
             set_locale,

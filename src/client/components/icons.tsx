@@ -127,6 +127,16 @@ export function DownloadIcon({ className = "size-4" }: IconProps) {
   );
 }
 
+export function DriverIcon({ className = "size-4" }: IconProps) {
+  return (
+    <svg className={`${base} ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="5" width="16" height="14" rx="2" />
+      <path d="M8 9h8M8 13h5" />
+      <path d="M7 2v3M12 2v3M17 2v3M7 19v3M12 19v3M17 19v3M2 8h2M2 12h2M2 16h2M20 8h2M20 12h2M20 16h2" />
+    </svg>
+  );
+}
+
 export function CpuIcon({ className = "size-4" }: IconProps) {
   return (
     <svg className={`${base} ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">

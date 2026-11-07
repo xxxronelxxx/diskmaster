@@ -5,6 +5,10 @@ import type {
   CleanPreview,
   CleanResult,
   DeleteResult,
+  DriverBackupScan,
+  DriverExportResult,
+  DriverOpResult,
+  DriverPackage,
   DuplicateProgress,
   DuplicateScan,
   FolderAnalysis,
@@ -130,6 +134,13 @@ export const api = {
   notificationTest: () => invoke<{ ok: boolean; error?: string }>("notification_test"),
 
   maintenanceStatus: () => invoke<MaintenanceStatus>("maintenance_status"),
+
+  driversList: () => invoke<DriverPackage[]>("drivers_list"),
+  driversScanBackup: (path: string) => invoke<DriverBackupScan>("drivers_scan_backup", { path }),
+  driversExport: (input: { parent: string; infs: string[] }) =>
+    invoke<DriverExportResult>("drivers_export", input),
+  driversRestore: (input: { root: string; infs: string[] }) =>
+    invoke<DriverOpResult[]>("drivers_restore", input),
   systemOperation: (input: { op: string; payload?: unknown }) =>
     invoke<{ ok: boolean; message: string; data: unknown }>("system_operation", { input }),
 };
@@ -216,5 +227,6 @@ export const queryClient = {
     notificationTest: { mutationOptions: mutation<Record<string, never> | undefined, { ok: boolean; error?: string }>("notification_test") },
 
     maintenanceStatus: { queryOptions: () => query<MaintenanceStatus>("maintenance_status") },
+    driversList: { queryOptions: () => query<DriverPackage[]>("drivers_list") },
   },
 };
