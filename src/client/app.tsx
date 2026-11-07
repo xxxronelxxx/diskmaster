@@ -36,6 +36,7 @@ import { DriversTab } from "./components/tab-drivers";
 import { SettingsTab } from "./components/tab-settings";
 import { WidgetTab } from "./components/tab-widget";
 import { UpdateBanner } from "./components/update-banner";
+import { CommandPalette, type PaletteItem } from "./components/command-palette";
 import { AboutModal } from "./components/about-modal";
 import { useUpdater } from "./lib/updater";
 import { useI18n } from "./i18n-provider";
@@ -106,6 +107,7 @@ function App() {
   const [theme, setTheme] = useState<Theme>(() => initTheme());
   const refreshedFor = useRef<string | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const updater = useUpdater();
   const { locale } = useI18n();
 
@@ -123,6 +125,32 @@ function App() {
       if (value && TABS.some((item) => item.id === value)) setTab(value as TabId);
     });
     return () => unlisten?.();
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
+        target?.isContentEditable;
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((current) => !current);
+        return;
+      }
+      if (!typing && (event.ctrlKey || event.metaKey) && /^[1-9]$/.test(event.key)) {
+        const item = TABS[Number(event.key) - 1];
+        if (item) {
+          event.preventDefault();
+          setTab(item.id);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   function toggleTheme() {
@@ -176,6 +204,53 @@ function App() {
   function go(next: TabId) {
     setTab(next);
   }
+
+  const paletteItems: PaletteItem[] = [
+    ...TABS.map((item) => {
+      const Icon = item.icon;
+      return {
+        id: `tab:${item.id}`,
+        label: t(item.label),
+        group: t(item.group),
+        icon: <Icon className="size-4" />,
+        run: () => {
+          setTab(item.id);
+          setPaletteOpen(false);
+        },
+      };
+    }),
+    {
+      id: "action:scan",
+      label: t("Проверить мусор"),
+      group: t("Действия"),
+      icon: <SparkleIcon className="size-4" />,
+      run: () => {
+        setTab("cleanup");
+        if (!scanJob || scanJob.finishedAt) startScan();
+        setPaletteOpen(false);
+      },
+    },
+    {
+      id: "action:smart",
+      label: t("Проверить SMART"),
+      group: t("Действия"),
+      icon: <ShieldIcon className="size-4" />,
+      run: () => {
+        setTab("maintenance");
+        setPaletteOpen(false);
+      },
+    },
+    {
+      id: "action:drivers",
+      label: t("Резервная копия драйверов"),
+      group: t("Действия"),
+      icon: <DriverIcon className="size-4" />,
+      run: () => {
+        setTab("drivers");
+        setPaletteOpen(false);
+      },
+    },
+  ];
 
   return (
     <div data-locale={locale} className="min-h-screen bg-[var(--app-bg)] text-slate-200">
@@ -279,6 +354,13 @@ function App() {
                   </span>
                 ) : null}
                 <button
+                  onClick={() => setPaletteOpen(true)}
+                  className="hidden items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-[10px] font-medium text-slate-500 transition-colors hover:bg-white/[0.07] hover:text-slate-200 sm:flex"
+                  title={t("Быстрый переход")}
+                >
+                  <span className="font-mono">Ctrl K</span>
+                </button>
+                <button
                   onClick={() => setAboutOpen(true)}
                   className="hidden items-center rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-[10px] font-medium tabular-nums text-slate-500 transition-colors hover:bg-white/[0.07] hover:text-slate-200 sm:flex"
                   title={t("О программе")}
@@ -358,6 +440,7 @@ function App() {
                 }}
                 onGoPrograms={() => go("programs")}
                 onGoUpdates={() => go("updates")}
+                onGoMaintenance={() => go("maintenance")}
               />
             ) : null}
 
@@ -399,6 +482,10 @@ function App() {
           </div>
         </main>
       </div>
+
+      {paletteOpen ? (
+        <CommandPalette items={paletteItems} onClose={() => setPaletteOpen(false)} />
+      ) : null}
 
       <AboutModal
         open={aboutOpen}

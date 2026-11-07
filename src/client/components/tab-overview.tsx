@@ -1,6 +1,9 @@
-import type { SystemInfo } from "@/shared/types";
-import { formatBytes, formatUptime, usedPercent } from "@/client/lib/format";
-import { Button, Card, Progress, SectionTitle } from "./ui";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import type { DriveSnapshot, SystemInfo } from "@/shared/types";
+import { queryClient } from "@/client/rpc-client";
+import { formatBytes, formatCount, formatDate, formatUptime, usedPercent } from "@/client/lib/format";
+import { Badge, Button, Card, Progress, SectionTitle } from "./ui";
 import {
   CpuIcon,
   GaugeIcon,
@@ -17,7 +20,37 @@ function driveTone(percent: number): "emerald" | "amber" | "rose" {
   return "emerald";
 }
 
-function DriveCard({ drive }: { drive: SystemInfo["drives"][number] }) {
+type Forecast = { text: string; tone: "neutral" | "warn" | "danger" };
+
+function forecastFor(letter: string, points: DriveSnapshot[], currentFree?: number): Forecast | null {
+  const series = points
+    .map((point) => ({ t: point.t, drive: point.drives.find((item) => item.letter === letter) }))
+    .filter((item): item is { t: number; drive: NonNullable<typeof item.drive> } => Boolean(item.drive));
+  if (series.length < 2) return null;
+  const first = series[0];
+  const last = series[series.length - 1];
+  const days = (last.t - first.t) / 86_400_000;
+  if (days < 0.2) return null;
+  const growth = (last.drive.used - first.drive.used) / days;
+  if (growth <= 0) return { text: t("заполнение не растёт"), tone: "neutral" };
+  const free = currentFree ?? last.drive.free;
+  if (free <= 0) return { text: t("диск заполнен"), tone: "danger" };
+  const daysLeft = free / growth;
+  if (daysLeft > 3650) return { text: t("больше 10 лет"), tone: "neutral" };
+  const rounded = Math.max(1, Math.round(daysLeft));
+  return {
+    text: t("заполнится через {days} дн.", { days: rounded }),
+    tone: daysLeft <= 7 ? "danger" : daysLeft <= 30 ? "warn" : "neutral",
+  };
+}
+
+function DriveCard({
+  drive,
+  forecast,
+}: {
+  drive: SystemInfo["drives"][number];
+  forecast?: Forecast | null;
+}) {
   const percent = usedPercent(drive.used, drive.total);
   return (
     <Card className="p-4">
@@ -49,6 +82,19 @@ function DriveCard({ drive }: { drive: SystemInfo["drives"][number] }) {
           {t("свободно")} {formatBytes(drive.free)}
         </span>
       </div>
+      {forecast ? (
+        <p
+          className={`mt-1 text-[10px] ${
+            forecast.tone === "danger"
+              ? "text-rose-300"
+              : forecast.tone === "warn"
+                ? "text-amber-300"
+                : "text-slate-500"
+          }`}
+        >
+          {forecast.text}
+        </p>
+      ) : null}
     </Card>
   );
 }
@@ -82,6 +128,7 @@ export function OverviewTab({
   onScan,
   onGoPrograms,
   onGoUpdates,
+  onGoMaintenance,
   scanRunning,
 }: {
   info: SystemInfo | null | undefined;
@@ -90,8 +137,14 @@ export function OverviewTab({
   onScan: () => void;
   onGoPrograms: () => void;
   onGoUpdates: () => void;
+  onGoMaintenance: () => void;
   scanRunning: boolean;
 }) {
+  const historyQuery = useQuery(queryClient.system.historyGet.queryOptions());
+  const smartQuery = useQuery(queryClient.system.smartHistory.queryOptions());
+  const cleanQuery = useQuery(queryClient.system.cleanHistory.queryOptions());
+  const [now] = useState(() => Date.now());
+
   if (loading && !info) {
     return (
       <div className="grid gap-4 sm:grid-cols-2">
@@ -119,6 +172,17 @@ export function OverviewTab({
     ? Math.round(((info.ramTotal - info.ramFree) / info.ramTotal) * 100)
     : 0;
 
+  const points = historyQuery.data?.points ?? [];
+  const smartDrives = (smartQuery.data ?? []).filter((drive) => drive.samples.length > 0);
+  const cleanCutoff = now - 30 * 24 * 60 * 60 * 1000;
+  const recentCleans = (cleanQuery.data ?? []).filter((entry) => entry.at >= cleanCutoff);
+  const cleanedBytes = recentCleans.reduce((sum, entry) => sum + entry.bytes, 0);
+  const cleanedFiles = recentCleans.reduce((sum, entry) => sum + entry.files, 0);
+  const lastClean = recentCleans.reduce<number | null>(
+    (latest, entry) => (latest === null || entry.at > latest ? entry.at : latest),
+    null,
+  );
+
   return (
     <div className="space-y-6">
       <SectionTitle
@@ -138,8 +202,76 @@ export function OverviewTab({
 
       <div className="grid gap-3 sm:grid-cols-2">
         {info.drives.map((drive) => (
-          <DriveCard key={drive.letter} drive={drive} />
+          <DriveCard
+            key={drive.letter}
+            drive={drive}
+            forecast={forecastFor(drive.letter, points, drive.free)}
+          />
         ))}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="p-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <ShieldIcon className="size-4 text-emerald-300" />
+              <h3 className="text-sm font-medium text-white">{t("Здоровье дисков")}</h3>
+            </div>
+            <Button size="sm" variant="secondary" onClick={onGoMaintenance}>
+              {t("Подробнее")}
+            </Button>
+          </div>
+          {smartDrives.length === 0 ? (
+            <p className="text-[11px] text-slate-500">
+              {t("Нет данных SMART. Откройте «Обслуживание», чтобы прочитать состояние дисков.")}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {smartDrives.map((drive) => {
+                const last = drive.samples[drive.samples.length - 1];
+                const attention = last.criticalWarning > 0 || last.healthPassed === false;
+                return (
+                  <div
+                    key={drive.key}
+                    className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-xs text-slate-200">
+                      {drive.model || t("Диск")}
+                    </span>
+                    {attention ? <Badge variant="danger">{t("внимание")}</Badge> : null}
+                    <span className="text-[11px] text-slate-400">
+                      {last.temperature !== null ? `${last.temperature} °C` : "—"}
+                      {last.wear !== null ? ` · ${t("износ")} ${last.wear}%` : ""}
+                    </span>
+                    <span className="text-[10px] text-slate-600">{formatDate(last.t)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <SparkleIcon className="size-4 text-sky-300" />
+            <h3 className="text-sm font-medium text-white">{t("Очистка за 30 дней")}</h3>
+          </div>
+          {recentCleans.length === 0 ? (
+            <p className="text-[11px] text-slate-500">{t("Пока нет очисток за последние 30 дней.")}</p>
+          ) : (
+            <>
+              <p className="text-2xl font-semibold tabular-nums text-white">{formatBytes(cleanedBytes, 0)}</p>
+              <p className="mt-1 text-[11px] text-slate-400">
+                {formatCount(cleanedFiles)} {t("файлов · очисток:")} {recentCleans.length}
+              </p>
+              {lastClean !== null ? (
+                <p className="mt-1 text-[10px] text-slate-600">
+                  {t("Последняя: {date}", { date: formatDate(lastClean) })}
+                </p>
+              ) : null}
+            </>
+          )}
+        </Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">

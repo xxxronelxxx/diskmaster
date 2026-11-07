@@ -23,9 +23,11 @@ function DriveChart({
       points
         .map((point) => {
           const drive = point.drives.find((item) => item.letter === letter);
-          return drive ? { t: point.t, used: drive.used, total: drive.total } : null;
+          return drive
+            ? { t: point.t, used: drive.used, free: drive.free, total: drive.total }
+            : null;
         })
-        .filter((value): value is { t: number; used: number; total: number } => Boolean(value)),
+        .filter((value): value is { t: number; used: number; free: number; total: number } => Boolean(value)),
     [points, letter],
   );
 
@@ -85,6 +87,24 @@ function DriveChart({
           </Badge>
         )}
       </div>
+
+      {perDay !== null && perDay > 0 && last.free > 0 ? (
+        <p
+          className={`mb-1 text-[11px] ${
+            last.free / perDay <= 7
+              ? "text-rose-300"
+              : last.free / perDay <= 30
+                ? "text-amber-300"
+                : "text-slate-500"
+          }`}
+        >
+          {last.free / perDay > 3650
+            ? t("больше 10 лет")
+            : t("заполнится через {days} дн.", {
+                days: Math.max(1, Math.round(last.free / perDay)),
+              })}
+        </p>
+      ) : null}
 
       <svg viewBox={`0 0 ${width} ${height}`} className="h-40 w-full" preserveAspectRatio="none">
         <defs>

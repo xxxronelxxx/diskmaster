@@ -30,6 +30,7 @@ machine.
 | `test-ui5.wsb` + `ui5.ps1` | Settings: Run key → highest scheduled task → back, checks task XML |
 | `test-ui-drivers.wsb` + `ui-drivers.ps1` | Drivers tab: renders list/empty state and action buttons |
 | `test-ui-scan.wsb` + `ui-scan.ps1` | Cleanup scan: starts a scan, checks progress/stop and results |
+| `test-ui-dashboard.wsb` + `ui-dashboard.ps1` | Overview dashboard cards and Ctrl+K palette |
 | `test-uninstall.wsb` + `uninstall-test.ps1` | Creates tasks/Run keys, starts app + sensors, uninstalls, verifies cleanup |
 | `test-upgrade.wsb` + `upgrade-test.ps1` | Installs 1.7.3, starts app + sensors, upgrades to 1.7.4 in place |
 

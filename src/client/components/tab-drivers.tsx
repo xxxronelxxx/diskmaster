@@ -45,6 +45,8 @@ export function DriversTab() {
   const drivers = listQuery.data ?? EMPTY_DRIVERS;
   const [search, setSearch] = useState("");
   const [classFilter, setClassFilter] = useState("all");
+  const [sort, setSort] = useState<"class" | "provider" | "name" | "version" | "date">("class");
+  const [sortAsc, setSortAsc] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<"export" | "scan" | "restore" | null>(null);
   const [result, setResult] = useState<string | null>(null);
@@ -55,6 +57,11 @@ export function DriversTab() {
   const [backupSelected, setBackupSelected] = useState<Set<string>>(new Set());
   const [restoreFiles, setRestoreFiles] = useState<string[] | null>(null);
   const [restorePoint, setRestorePoint] = useState(true);
+  const [now] = useState(() => Date.now());
+  const [lastBackup, setLastBackup] = useState<number>(() =>
+    Number(localStorage.getItem("dm.drivers.lastBackup") ?? 0),
+  );
+  const backupStale = !lastBackup || now - lastBackup > 90 * 24 * 60 * 60 * 1000;
 
   const classes = useMemo(
     () =>
@@ -66,7 +73,7 @@ export function DriversTab() {
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return drivers.filter((driver) => {
+    const list = drivers.filter((driver) => {
       if (classFilter !== "all" && driver.className !== classFilter) return false;
       if (!query) return true;
       return [
@@ -81,7 +88,27 @@ export function DriversTab() {
         .toLowerCase()
         .includes(query);
     });
-  }, [drivers, search, classFilter]);
+    const direction = sortAsc ? 1 : -1;
+    const dateValue = (value: string) => {
+      const [month, day, year] = value.split("/").map(Number);
+      return year ? new Date(year, month - 1, day).getTime() : 0;
+    };
+    return list.sort((left, right) => {
+      if (sort === "provider") {
+        return left.provider.localeCompare(right.provider, "ru") * direction;
+      }
+      if (sort === "name") {
+        return left.originalName.localeCompare(right.originalName, "ru") * direction;
+      }
+      if (sort === "version") {
+        return left.version.localeCompare(right.version, "ru") * direction;
+      }
+      if (sort === "date") {
+        return (dateValue(left.date) - dateValue(right.date)) * direction;
+      }
+      return left.className.localeCompare(right.className, "ru") * direction;
+    });
+  }, [drivers, search, classFilter, sort, sortAsc]);
 
   const allSelected =
     filtered.length > 0 && filtered.every((driver) => selected.has(driver.publishedName));
@@ -130,6 +157,9 @@ export function DriversTab() {
         infs: all ? [] : Array.from(selected),
       });
       setExportResult(response);
+      const stamp = Date.now();
+      setLastBackup(stamp);
+      localStorage.setItem("dm.drivers.lastBackup", String(stamp));
       const failed = response.items.filter((item) => !item.ok).length;
       setResult(
         failed === 0
@@ -233,6 +263,23 @@ export function DriversTab() {
         </p>
       </Card>
 
+      {backupStale ? (
+        <Card className="border-sky-400/20 bg-sky-400/[0.05] p-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[11px] text-sky-100">
+              {lastBackup
+                ? t("Резервная копия драйверов старше 90 дней. Последняя: {date}", {
+                    date: formatDate(lastBackup),
+                  })
+                : t("Резервная копия драйверов ещё не делалась.")}
+            </p>
+            <Button size="sm" variant="secondary" loading={busy === "export"} onClick={() => void exportDrivers(true)}>
+              {t("Сделать бэкап")}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+
       {error ? (
         <Card className="border-rose-400/25 bg-rose-500/[0.07] p-3.5">
           <p className="text-xs text-rose-100">{error}</p>
@@ -266,6 +313,24 @@ export function DriversTab() {
                 </option>
               ))}
             </select>
+            <select
+              value={sort}
+              onChange={(event) => setSort(event.target.value as typeof sort)}
+              className="rounded-lg border border-white/10 bg-[var(--app-menu)] px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-emerald-400/40"
+            >
+              <option value="class">{t("Класс")}</option>
+              <option value="provider">{t("Поставщик")}</option>
+              <option value="name">{t("Имя")}</option>
+              <option value="version">{t("Версия")}</option>
+              <option value="date">{t("Дата")}</option>
+            </select>
+            <button
+              onClick={() => setSortAsc((current) => !current)}
+              className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs text-slate-300"
+              title={t("Направление сортировки")}
+            >
+              {sortAsc ? "↑" : "↓"}
+            </button>
           </div>
           <Badge variant="neutral">{filtered.length}</Badge>
           <Button

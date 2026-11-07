@@ -41,6 +41,8 @@ export function LargeFilesTab({
   const [renderLimit, setRenderLimit] = useState(200);
   const [extension, setExtension] = useState<string | null>(null);
   const [age, setAge] = useState<"all" | "6" | "12">("all");
+  const [sort, setSort] = useState<"size" | "date" | "name">("size");
+  const [sortAsc, setSortAsc] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   const scanning = Boolean(job && !job.finishedAt);
@@ -66,15 +68,22 @@ export function LargeFilesTab({
     return dot > 0 ? file.name.slice(dot + 1).toLowerCase() : "";
   }).filter(Boolean))].sort();
 
-  const visibleFiles = files.filter((file) => {
-    if (extension && !file.name.toLowerCase().endsWith(`.${extension}`)) return false;
-    if (age !== "all") {
-      const months = age === "6" ? 6 : 12;
-      if (Date.now() - file.modified < months * 30 * 24 * 60 * 60 * 1000) return false;
-    }
-    if (query && !file.path.toLowerCase().includes(query.toLowerCase())) return false;
-    return true;
-  });
+  const visibleFiles = files
+    .filter((file) => {
+      if (extension && !file.name.toLowerCase().endsWith(`.${extension}`)) return false;
+      if (age !== "all") {
+        const months = age === "6" ? 6 : 12;
+        if (Date.now() - file.modified < months * 30 * 24 * 60 * 60 * 1000) return false;
+      }
+      if (query && !file.path.toLowerCase().includes(query.toLowerCase())) return false;
+      return true;
+    })
+    .sort((left, right) => {
+      const direction = sortAsc ? 1 : -1;
+      if (sort === "size") return (left.size - right.size) * direction;
+      if (sort === "date") return (left.modified - right.modified) * direction;
+      return left.name.localeCompare(right.name, "ru") * direction;
+    });
 
   const selectedFiles = visibleFiles.filter((file) => selected.has(file.path));
   const renderedFiles = visibleFiles.slice(0, renderLimit);
@@ -194,6 +203,22 @@ export function LargeFilesTab({
             <option value="6">{t("старше 6 мес.")}</option>
             <option value="12">{t("старше 12 мес.")}</option>
           </select>
+          <select
+            value={sort}
+            onChange={(event) => setSort(event.target.value as "size" | "date" | "name")}
+            className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs text-slate-300 outline-none"
+          >
+            <option value="size">{t("Размер")}</option>
+            <option value="date">{t("Дата")}</option>
+            <option value="name">{t("Имя")}</option>
+          </select>
+          <button
+            onClick={() => setSortAsc((current) => !current)}
+            className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs text-slate-300"
+            title={t("Направление сортировки")}
+          >
+            {sortAsc ? "↑" : "↓"}
+          </button>
           <Button size="sm" variant="secondary" onClick={() => void exportCsv()} loading={exporting}>
             CSV
           </Button>
