@@ -379,6 +379,7 @@ export type DiskHealth = {
   writeErrors: number | null;
   smart: boolean;
   protocol: SmartProtocol | null;
+  historyKey: string | null;
   healthPassed: boolean | null;
   attributes: AtaAttribute[];
   busType: number | null;
@@ -411,12 +412,30 @@ export type SmartWarning =
   | "persistentMemory"
   | "predictFailure";
 
+export type SmartSample = {
+  t: number;
+  temperature: number | null;
+  wear: number | null;
+  powerOnHours: number | null;
+  mediaErrors: number | null;
+  criticalWarning: number;
+  healthPassed: boolean | null;
+};
+
+export type SmartHistoryDrive = {
+  key: string;
+  protocol: SmartProtocol;
+  model: string;
+  samples: SmartSample[];
+};
+
 export type SmartDisk = {
   index: number;
   model: string;
   serial: string;
   busType: number;
   protocol: SmartProtocol;
+  historyKey: string;
   criticalWarning: number;
   warnings: SmartWarning[];
   healthPassed: boolean | null;
@@ -462,6 +481,7 @@ export type AppSettings = {
   lowDiskPercent: number;
   lowDiskCooldownMin: number;
   quickCleanNotify: boolean;
+  smartNotify: boolean;
   minimizeToTray: boolean;
   alwaysAdmin: boolean;
   protectPaths: string[];

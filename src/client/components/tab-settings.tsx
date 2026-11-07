@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   lowDiskPercent: 10,
   lowDiskCooldownMin: 60,
   quickCleanNotify: true,
+  smartNotify: true,
   minimizeToTray: true,
   alwaysAdmin: false,
   protectPaths: [],
@@ -301,6 +302,19 @@ export function SettingsTab() {
           {notifyResult ? (
             <p className="mt-2 text-[11px] text-slate-400">{notifyResult}</p>
           ) : null}
+
+          <div className="my-2 h-px bg-white/[0.06]" />
+
+          <SettingRow
+            title={t("Проблемы SMART")}
+            description={t("Уведомлять, если диск сообщает о критическом предупреждении или возможном отказе.")}
+          >
+            <Switch
+              label={t("Уведомлять о проблемах SMART")}
+              checked={settings.smartNotify}
+              onChange={(value) => patch({ smartNotify: value })}
+            />
+          </SettingRow>
 
           <div className="my-2 h-px bg-white/[0.06]" />
 

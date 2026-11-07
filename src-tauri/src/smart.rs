@@ -32,6 +32,15 @@ pub enum SmartProtocol {
     Ata,
 }
 
+impl SmartProtocol {
+    pub fn key(self) -> &'static str {
+        match self {
+            SmartProtocol::Nvme => "nvme",
+            SmartProtocol::Ata => "ata",
+        }
+    }
+}
+
 /// Warning conditions reported by the drive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -47,6 +56,19 @@ pub enum SmartWarning {
 }
 
 impl SmartWarning {
+    #[allow(dead_code)]
+    pub fn key(self) -> &'static str {
+        match self {
+            SmartWarning::AvailableSpare => "availableSpare",
+            SmartWarning::Temperature => "temperature",
+            SmartWarning::Reliability => "reliability",
+            SmartWarning::ReadOnly => "readOnly",
+            SmartWarning::VolatileMemory => "volatileMemory",
+            SmartWarning::PersistentMemory => "persistentMemory",
+            SmartWarning::PredictFailure => "predictFailure",
+        }
+    }
+
     fn from_mask(mask: u8) -> Vec<Self> {
         const BITS: [(u8, SmartWarning); 6] = [
             (1 << 0, SmartWarning::AvailableSpare),
@@ -80,6 +102,7 @@ pub struct SmartDisk {
     pub serial: String,
     pub bus_type: u32,
     pub protocol: SmartProtocol,
+    pub history_key: String,
     pub critical_warning: u8,
     pub warnings: Vec<SmartWarning>,
     pub health_passed: Option<bool>,
@@ -416,6 +439,17 @@ struct AtaSmart {
     attributes: Vec<AtaAttribute>,
 }
 
+fn history_key(protocol: SmartProtocol, serial: &str, model: &str, index: u32) -> String {
+    let identity = if !serial.is_empty() {
+        serial
+    } else if !model.is_empty() {
+        model
+    } else {
+        return format!("{}:{index}", protocol.key());
+    };
+    format!("{}:{identity}", protocol.key())
+}
+
 fn nvme_disk(index: u32, descriptor: &Descriptor, parsed: SmartDiskFields) -> SmartDisk {
     SmartDisk {
         index,
@@ -423,6 +457,12 @@ fn nvme_disk(index: u32, descriptor: &Descriptor, parsed: SmartDiskFields) -> Sm
         serial: descriptor.serial.clone(),
         bus_type: descriptor.bus_type,
         protocol: SmartProtocol::Nvme,
+        history_key: history_key(
+            SmartProtocol::Nvme,
+            &descriptor.serial,
+            &descriptor.model,
+            index,
+        ),
         critical_warning: parsed.critical_warning,
         warnings: parsed.warnings,
         health_passed: None,
@@ -447,6 +487,12 @@ fn ata_disk(index: u32, descriptor: &Descriptor, ata: AtaSmart) -> SmartDisk {
         serial: descriptor.serial.clone(),
         bus_type: descriptor.bus_type,
         protocol: SmartProtocol::Ata,
+        history_key: history_key(
+            SmartProtocol::Ata,
+            &descriptor.serial,
+            &descriptor.model,
+            index,
+        ),
         critical_warning: 0,
         warnings: if ata.health_passed {
             Vec::new()

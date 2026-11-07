@@ -1,11 +1,19 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/client/api";
 import { queryClient } from "@/client/rpc-client";
-import type { AtaAttribute, MaintenanceStatus, SmartDisk, SmartProtocol, SmartWarning } from "@/shared/types";
+import type {
+  AtaAttribute,
+  MaintenanceStatus,
+  SmartDisk,
+  SmartHistoryDrive,
+  SmartProtocol,
+  SmartWarning,
+} from "@/shared/types";
 import { formatBytes, formatCount, formatDate } from "@/client/lib/format";
 import { Badge, Button, Card, EmptyState, Modal, SectionTitle } from "./ui";
 import { SensorsPanel } from "./sensors-panel";
+import { Sparkline } from "./sparkline";
 import { AlertIcon, RefreshIcon, ShieldIcon, TrashIcon } from "./icons";
 import { t, translateError } from "@/client/i18n";
 
@@ -122,6 +130,50 @@ function AtaAttributes({ attributes }: { attributes: AtaAttribute[] }) {
   );
 }
 
+function SmartHistoryCharts({ history }: { history: SmartHistoryDrive | null }) {
+  if (!history) return null;
+  const latest = history.samples[history.samples.length - 1]?.t ?? 0;
+  const cutoff = latest - 30 * 24 * 60 * 60 * 1000;
+  const samples = history.samples.filter((sample) => sample.t >= cutoff);
+  const temperatures = samples
+    .map((sample) => sample.temperature)
+    .filter((value): value is number => value !== null);
+  const wear = samples
+    .map((sample) => sample.wear)
+    .filter((value): value is number => value !== null);
+  if (temperatures.length < 2 && wear.length < 2) {
+    return samples.length > 0 ? (
+      <p className="mt-2 text-[10px] text-slate-500">{t("история пополняется раз в час")}</p>
+    ) : null;
+  }
+  return (
+    <div className="mt-2 grid grid-cols-2 gap-2">
+      {temperatures.length >= 2 ? (
+        <div>
+          <div className="flex items-baseline justify-between gap-2 text-[10px]">
+            <span className="text-slate-500">{t("температура, 30 дней")}</span>
+            <span className="text-slate-300">
+              {Math.min(...temperatures)}–{Math.max(...temperatures)} °C
+            </span>
+          </div>
+          <Sparkline values={temperatures} max={100} height={28} tone="sky" />
+        </div>
+      ) : null}
+      {wear.length >= 2 ? (
+        <div>
+          <div className="flex items-baseline justify-between gap-2 text-[10px]">
+            <span className="text-slate-500">{t("износ, 30 дней")}</span>
+            <span className="text-slate-300">
+              {Math.min(...wear)}–{Math.max(...wear)}%
+            </span>
+          </div>
+          <Sparkline values={wear} max={Math.max(10, ...wear)} height={28} tone="amber" />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function SmartWarningChips({ warnings, critical }: { warnings: SmartWarning[]; critical: number }) {
   if (!warnings.length) {
     return critical > 0 ? (
@@ -155,10 +207,12 @@ function SmartDetails({
   errorLogEntries,
   dataRead,
   dataWritten,
+  history,
 }: {
   protocol: SmartProtocol | null;
   healthPassed: boolean | null;
   attributes: AtaAttribute[];
+  history: SmartHistoryDrive | null;
   availableSpare: number | null;
   spareThreshold: number | null;
   unsafeShutdowns: number | null;
@@ -193,14 +247,121 @@ function SmartDetails({
           </div>
         ))}
       </dl>
+      <SmartHistoryCharts history={history} />
       <AtaAttributes attributes={attributes} />
     </details>
   );
 }
 
+function buildSmartReport(
+  status: MaintenanceStatus | undefined,
+  smartDisks: SmartDisk[] | null,
+  history: SmartHistoryDrive[],
+): string {
+  const lines: string[] = [
+    `${t("Диск-Мастер")} — ${t("отчёт о дисках")}`,
+    `${t("дата")}: ${new Date().toLocaleString()}`,
+    "",
+  ];
+
+  const historyFor = (key: string | null | undefined) => {
+    if (!key) return null;
+    return history.find((drive) => drive.key === key) ?? null;
+  };
+  const historyLine = (key: string | null | undefined) => {
+    const drive = historyFor(key);
+    if (!drive || drive.samples.length === 0) return "";
+    const temperatures = drive.samples
+      .map((sample) => sample.temperature)
+      .filter((value): value is number => value !== null);
+    const last = drive.samples[drive.samples.length - 1];
+    const range =
+      temperatures.length >= 2 ? ` (${Math.min(...temperatures)}–${Math.max(...temperatures)})` : "";
+    return `${t("история")}: ${t("точек")} ${drive.samples.length}, ${t("температура")} ${last.temperature ?? "—"} °C${range}`;
+  };
+  const warningLine = (warnings: SmartWarning[]) =>
+    warnings.length ? warnings.map((warning) => t(SMART_WARNING_LABELS[warning])).join(", ") : t("нет");
+
+  const disks = status?.disks ?? [];
+  if (disks.length) {
+    disks.forEach((disk) => {
+      const matched = disk.smart
+        ? undefined
+        : smartDisks?.find(
+            (item) =>
+              item.index === Number(disk.deviceId) ||
+              (item.serial !== "" && item.serial === disk.serial),
+          );
+      const protocol = disk.protocol ?? matched?.protocol ?? null;
+      const warnings = disk.warnings.length ? disk.warnings : (matched?.warnings ?? []);
+      const temperature = disk.temperature ?? matched?.temperature ?? null;
+      const wear = disk.wear ?? matched?.wear ?? null;
+      const hours = disk.powerOnHours ?? matched?.powerOnHours ?? null;
+      const attributes = disk.attributes.length ? disk.attributes : (matched?.attributes ?? []);
+      lines.push(`${disk.name} (${protocolLabel(protocol)})`);
+      lines.push(`  ${t("Здоровье")}: ${healthLabel(disk.health).text}`);
+      if (temperature !== null) lines.push(`  ${t("температура")}: ${temperature} °C`);
+      if (wear !== null) lines.push(`  ${t("износ")}: ${wear}%`);
+      if (hours !== null) lines.push(`  ${t("часы работы")}: ${hours}`);
+      const spare = disk.availableSpare ?? matched?.availableSpare ?? null;
+      if (spare !== null) lines.push(`  ${t("резерв")}: ${spare}%`);
+      const errors = disk.mediaErrors ?? matched?.mediaErrors ?? null;
+      if (errors !== null) lines.push(`  ${t("ошибок носителя")}: ${formatCount(errors)}`);
+      const unsafe = disk.unsafeShutdowns ?? matched?.unsafeShutdowns ?? null;
+      if (unsafe !== null) lines.push(`  ${t("некорректных выключений")}: ${formatCount(unsafe)}`);
+      const read = disk.dataRead ?? matched?.dataRead ?? null;
+      if (read !== null) lines.push(`  ${t("прочитано")}: ${formatBytes(read, 1)}`);
+      const written = disk.dataWritten ?? matched?.dataWritten ?? null;
+      if (written !== null) lines.push(`  ${t("записано")}: ${formatBytes(written, 1)}`);
+      lines.push(`  ${t("Предупреждения")}: ${warningLine(warnings)}`);
+      const historyEntry = historyLine(disk.historyKey ?? matched?.historyKey ?? null);
+      if (historyEntry) lines.push(`  ${historyEntry}`);
+      attributes.forEach((attribute) => {
+        const label = ATA_ATTRIBUTE_LABELS[attribute.id];
+        lines.push(
+          `  ${attribute.id} ${label ? t(label) : t("атрибут")}: ${attribute.value}/${attribute.worst}, raw ${formatCount(attribute.raw)}`,
+        );
+      });
+      lines.push("");
+    });
+  } else if (smartDisks?.length) {
+    smartDisks.forEach((disk) => {
+      lines.push(`${disk.model || t("Диск")} (${protocolLabel(disk.protocol)})`);
+      if (disk.temperature !== null) lines.push(`  ${t("температура")}: ${disk.temperature} °C`);
+      if (disk.wear !== null) lines.push(`  ${t("износ")}: ${disk.wear}%`);
+      if (disk.powerOnHours !== null) lines.push(`  ${t("часы работы")}: ${disk.powerOnHours}`);
+      if (disk.availableSpare !== null) lines.push(`  ${t("резерв")}: ${disk.availableSpare}%`);
+      if (disk.mediaErrors !== null) lines.push(`  ${t("ошибок носителя")}: ${formatCount(disk.mediaErrors)}`);
+      if (disk.unsafeShutdowns !== null) lines.push(`  ${t("некорректных выключений")}: ${formatCount(disk.unsafeShutdowns)}`);
+      if (disk.dataRead !== null) lines.push(`  ${t("прочитано")}: ${formatBytes(disk.dataRead, 1)}`);
+      if (disk.dataWritten !== null) lines.push(`  ${t("записано")}: ${formatBytes(disk.dataWritten, 1)}`);
+      lines.push(`  ${t("Предупреждения")}: ${warningLine(disk.warnings)}`);
+      const historyEntry = historyLine(disk.historyKey);
+      if (historyEntry) lines.push(`  ${historyEntry}`);
+      disk.attributes.forEach((attribute) => {
+        const label = ATA_ATTRIBUTE_LABELS[attribute.id];
+        lines.push(
+          `  ${attribute.id} ${label ? t(label) : t("атрибут")}: ${attribute.value}/${attribute.worst}, raw ${formatCount(attribute.raw)}`,
+        );
+      });
+      lines.push("");
+    });
+  } else {
+    lines.push(t("SMART не прочитан: NVMe-диск не найден или Windows не отдал журнал здоровья."));
+  }
+
+  return lines.join("\n");
+}
+
 export function MaintenanceTab() {
   const statusQuery = useQuery(queryClient.system.maintenanceStatus.queryOptions());
   const status = statusQuery.data as MaintenanceStatus | undefined;
+  const historyQuery = useQuery(queryClient.system.smartHistory.queryOptions());
+  const historyByKey = useMemo(
+    () => new Map((historyQuery.data ?? []).map((drive) => [drive.key, drive])),
+    [historyQuery.data],
+  );
+  const refetchHistory = historyQuery.refetch;
   const [pending, setPending] = useState<Pending | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -219,6 +380,23 @@ export function MaintenanceTab() {
     setError(null);
     try {
       setSmartDisks(await smartMutation.mutateAsync());
+      await refetchHistory();
+    } catch (cause) {
+      setError(translateError(cause));
+    }
+  }
+
+  useEffect(() => {
+    if (status?.disks.some((disk) => disk.smart)) {
+      void refetchHistory();
+    }
+  }, [status, refetchHistory]);
+
+  async function copyReport() {
+    setError(null);
+    try {
+      await api.copyText(buildSmartReport(status, smartDisks, historyQuery.data ?? []));
+      setResult(t("Отчёт о дисках скопирован в буфер обмена."));
     } catch (cause) {
       setError(translateError(cause));
     }
@@ -333,6 +511,7 @@ export function MaintenanceTab() {
                         errorLogEntries={disk.errorLogEntries}
                         dataRead={disk.dataRead}
                         dataWritten={disk.dataWritten}
+                        history={historyByKey.get(disk.historyKey) ?? null}
                       />
                     </div>
                   ))}
@@ -353,6 +532,7 @@ export function MaintenanceTab() {
                       );
                   const hasSmart = disk.smart || Boolean(matched);
                   const protocol = disk.protocol ?? matched?.protocol ?? null;
+                  const historyKey = disk.historyKey ?? matched?.historyKey ?? null;
                   const healthPassed = disk.healthPassed ?? matched?.healthPassed ?? null;
                   const attributes = disk.attributes.length
                     ? disk.attributes
@@ -398,6 +578,7 @@ export function MaintenanceTab() {
                           errorLogEntries={errorLogEntries}
                           dataRead={dataRead}
                           dataWritten={dataWritten}
+                          history={historyKey ? (historyByKey.get(historyKey) ?? null) : null}
                         />
                       ) : unsupportedBus ? (
                         <p className="mt-1 text-[10px] text-slate-500">
@@ -410,20 +591,30 @@ export function MaintenanceTab() {
               </div>
             )}
             <div className="mt-2 space-y-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => void readSmart()}
-                loading={smartMutation.isPending}
-              >
-                {smartLoaded
-                  ? status?.elevated
-                    ? t("Обновить SMART")
-                    : t("Обновить SMART (UAC)")
-                  : status?.elevated
-                    ? t("Прочитать SMART")
-                    : t("Прочитать SMART (UAC)")}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => void readSmart()}
+                  loading={smartMutation.isPending}
+                >
+                  {smartLoaded
+                    ? status?.elevated
+                      ? t("Обновить SMART")
+                      : t("Обновить SMART (UAC)")
+                    : status?.elevated
+                      ? t("Прочитать SMART")
+                      : t("Прочитать SMART (UAC)")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={!status?.disks.length && !smartDisks?.length}
+                  onClick={() => void copyReport()}
+                >
+                  {t("Скопировать отчёт")}
+                </Button>
+              </div>
               {smartDisks !== null && smartDisks.length === 0 ? (
                 <p className="text-[11px] text-slate-500">
                   {status?.disks.some((disk) => disk.busType === 7)

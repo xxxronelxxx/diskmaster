@@ -20,6 +20,7 @@ pub struct DiskHealth {
     pub write_errors: Option<u64>,
     pub smart: bool,
     pub protocol: Option<SmartProtocol>,
+    pub history_key: Option<String>,
     pub health_passed: Option<bool>,
     pub attributes: Vec<AtaAttribute>,
     pub bus_type: Option<u16>,
@@ -128,6 +129,7 @@ fn connection(namespace: &str) -> Option<wmi::WMIConnection> {
 
 fn disks() -> Vec<DiskHealth> {
     let smart_disks = crate::smart::read_all();
+    crate::smart_history::record(&smart_disks);
     let Some(wmi) = connection("ROOT\\Microsoft\\Windows\\Storage") else {
         return Vec::new();
     };
@@ -177,6 +179,7 @@ fn disks() -> Vec<DiskHealth> {
                 write_errors: counter.and_then(|item| item.write_errors),
                 smart: smart.is_some(),
                 protocol: smart.map(|item| item.protocol),
+                history_key: smart.map(|item| item.history_key.clone()),
                 health_passed: smart.and_then(|item| item.health_passed),
                 attributes: smart
                     .map(|item| item.attributes.clone())

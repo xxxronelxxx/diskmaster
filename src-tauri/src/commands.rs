@@ -8,6 +8,7 @@ use crate::maintenance::{self, MaintenanceStatus};
 use crate::sensors::{self, SensorsState};
 use crate::settings::AppSettings;
 use crate::smart::SmartDisk;
+use crate::smart_history::SmartHistoryDrive;
 use crate::state::AppState;
 use crate::types::*;
 use crate::{
@@ -450,8 +451,8 @@ pub async fn sensors_stop() -> CmdResult<SensorsState> {
 }
 
 #[tauri::command]
-pub async fn smart_read() -> CmdResult<Vec<SmartDisk>> {
-    blocking(|| {
+pub async fn smart_read(app: tauri::AppHandle) -> CmdResult<Vec<SmartDisk>> {
+    let disks = blocking(|| -> CmdResult<Vec<SmartDisk>> {
         if crate::smart::is_elevated() {
             return Ok(crate::smart::read_all());
         }
@@ -463,7 +464,22 @@ pub async fn smart_read() -> CmdResult<Vec<SmartDisk>> {
         let disks = serde_json::from_value::<Vec<SmartDisk>>(data).unwrap_or_default();
         Ok(disks)
     })
-    .await?
+    .await??;
+
+    crate::smart_history::record(&disks);
+    crate::smart_alerts::check_smart(&app, &disks);
+    Ok(disks)
+}
+
+#[tauri::command]
+pub fn smart_history() -> Vec<SmartHistoryDrive> {
+    crate::smart_history::read()
+}
+
+#[tauri::command]
+pub fn copy_text(text: String) -> Result<(), String> {
+    let mut clipboard = arboard::Clipboard::new().map_err(|error| error.to_string())?;
+    clipboard.set_text(text).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -529,8 +545,10 @@ pub fn clean_history() -> Vec<CleanHistoryEntry> {
 }
 
 #[tauri::command]
-pub async fn maintenance_status() -> CmdResult<MaintenanceStatus> {
-    blocking(maintenance::status).await
+pub async fn maintenance_status(app: tauri::AppHandle) -> CmdResult<MaintenanceStatus> {
+    let status = blocking(maintenance::status).await?;
+    crate::smart_alerts::check_health(&app, &status.disks);
+    Ok(status)
 }
 
 #[derive(Deserialize)]
