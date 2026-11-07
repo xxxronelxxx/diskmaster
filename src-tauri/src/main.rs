@@ -21,6 +21,7 @@ mod settings;
 mod smart;
 mod smart_alerts;
 mod smart_history;
+mod smart_monitor;
 mod startup;
 mod state;
 mod system;
@@ -450,6 +451,20 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         true,
         None::<&str>,
     )?;
+    let health = MenuItem::with_id(
+        app,
+        "smart-health",
+        smart_monitor::tray_label(),
+        false,
+        None::<&str>,
+    )?;
+    let health_open = MenuItem::with_id(
+        app,
+        "smart-open",
+        locale::tr("Здоровье дисков", "Disk health"),
+        true,
+        None::<&str>,
+    )?;
     let quick = MenuItem::with_id(
         app,
         "quick-clean",
@@ -494,6 +509,8 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         app,
         &[
             &open,
+            &health,
+            &health_open,
             &separator,
             &widget,
             &quick,
@@ -504,6 +521,14 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &quit,
         ],
     )
+}
+
+pub(crate) fn refresh_tray_menu(app: &AppHandle) {
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        if let Ok(menu) = build_menu(app) {
+            let _ = tray.set_menu(Some(menu));
+        }
+    }
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
@@ -530,6 +555,10 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open" => show_main(app),
+            "smart-open" => {
+                show_main(app);
+                let _ = app.emit("navigate", "maintenance");
+            }
             "widget" => toggle_widget(app),
             "quick-clean" => {
                 let app = app.clone();
@@ -898,6 +927,7 @@ fn main() {
                 let _ = widget::launch(app.handle(), None);
             }
             history::start_sampler();
+            smart_monitor::start(app.handle().clone());
             logging::log("window setup complete");
 
             // Warm up the metrics sampler after the first paint so the

@@ -157,11 +157,7 @@ hotkeys={} / {}
         info.ram_total,
         info.ram_free,
         info.admin,
-        if crate::smart::is_elevated() {
-            "direct"
-        } else {
-            "uac"
-        },
+        crate::smart_monitor::diagnostics_line(),
         sensor_line,
         crate::autostart_mode(),
         hotkeys.hotkey_show,
@@ -468,6 +464,11 @@ pub async fn smart_read(app: tauri::AppHandle) -> CmdResult<Vec<SmartDisk>> {
 
     crate::smart_history::record(&disks);
     crate::smart_alerts::check_smart(&app, &disks);
+    if !disks.is_empty() {
+        crate::smart_monitor::update(&disks);
+        let handle = app.clone();
+        let _ = app.run_on_main_thread(move || crate::refresh_tray_menu(&handle));
+    }
     Ok(disks)
 }
 
@@ -548,6 +549,8 @@ pub fn clean_history() -> Vec<CleanHistoryEntry> {
 pub async fn maintenance_status(app: tauri::AppHandle) -> CmdResult<MaintenanceStatus> {
     let status = blocking(maintenance::status).await?;
     crate::smart_alerts::check_health(&app, &status.disks);
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || crate::refresh_tray_menu(&handle));
     Ok(status)
 }
 

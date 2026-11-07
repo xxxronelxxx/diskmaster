@@ -132,6 +132,20 @@ try {
   $Result.steps += [ordered]@{ step = 'button-still-there'; found = [bool]$buttonAfter }
 
   "SMART fallback checked" | Out-File (Join-Path $Share 'ui6-smart.txt') -Encoding utf8
+
+  Step 'background'
+  Start-Sleep -Seconds 10
+  $logPath = Join-Path $Share 'app\disk-master-data\logs\app.log'
+  $backgroundFound = $false
+  $backgroundLine = ''
+  if (Test-Path $logPath) {
+    $line = Get-Content $logPath -Encoding UTF8 | Select-String -Pattern 'smart: background check' | Select-Object -Last 1
+    if ($line) {
+      $backgroundFound = $true
+      $backgroundLine = $line.Line
+    }
+  }
+  $Result.steps += [ordered]@{ step = 'background-log'; found = $backgroundFound; line = $backgroundLine }
   Step 'done'
 } catch {
   $Result.notes += "fatal: $($_.Exception.Message)"

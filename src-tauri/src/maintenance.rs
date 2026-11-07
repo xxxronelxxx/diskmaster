@@ -130,6 +130,9 @@ fn connection(namespace: &str) -> Option<wmi::WMIConnection> {
 fn disks() -> Vec<DiskHealth> {
     let smart_disks = crate::smart::read_all();
     crate::smart_history::record(&smart_disks);
+    if !smart_disks.is_empty() {
+        crate::smart_monitor::update(&smart_disks);
+    }
     let Some(wmi) = connection("ROOT\\Microsoft\\Windows\\Storage") else {
         return Vec::new();
     };

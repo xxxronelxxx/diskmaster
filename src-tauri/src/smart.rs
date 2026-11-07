@@ -24,6 +24,7 @@ const NVME_HEALTH_LOG_SIZE: usize = 512;
 const ATA_SMART_SIZE: usize = 512;
 const PREDICT_FAILURE_SIZE: usize = 4 + ATA_SMART_SIZE;
 const BUS_TYPE_NVME: u32 = 17;
+const BUS_TYPE_USB: u32 = 7;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -515,6 +516,17 @@ fn ata_disk(index: u32, descriptor: &Descriptor, ata: AtaSmart) -> SmartDisk {
 }
 
 pub fn read_all() -> Vec<SmartDisk> {
+    read_all_inner(false)
+}
+
+/// Background checks skip USB bridges: many of them do not pass SMART through,
+/// and opening an external drive every hour can spin it up for nothing.
+#[allow(dead_code)]
+pub fn read_all_excluding_usb() -> Vec<SmartDisk> {
+    read_all_inner(true)
+}
+
+fn read_all_inner(skip_usb: bool) -> Vec<SmartDisk> {
     if !is_elevated() {
         return Vec::new();
     }
@@ -525,6 +537,10 @@ pub fn read_all() -> Vec<SmartDisk> {
             continue;
         };
         let descriptor = query_descriptor(handle).unwrap_or_default();
+        if skip_usb && descriptor.bus_type == BUS_TYPE_USB {
+            unsafe { CloseHandle(handle) };
+            continue;
+        }
         let mut smart = None;
 
         // NVMe health log pages, or an unknown bus where the descriptor failed.

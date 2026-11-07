@@ -482,6 +482,7 @@ export type AppSettings = {
   lowDiskCooldownMin: number;
   quickCleanNotify: boolean;
   smartNotify: boolean;
+  smartBackground: boolean;
   minimizeToTray: boolean;
   alwaysAdmin: boolean;
   protectPaths: string[];

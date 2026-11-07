@@ -16,6 +16,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   lowDiskCooldownMin: 60,
   quickCleanNotify: true,
   smartNotify: true,
+  smartBackground: true,
   minimizeToTray: true,
   alwaysAdmin: false,
   protectPaths: [],
@@ -313,6 +314,19 @@ export function SettingsTab() {
               label={t("Уведомлять о проблемах SMART")}
               checked={settings.smartNotify}
               onChange={(value) => patch({ smartNotify: value })}
+            />
+          </SettingRow>
+
+          <div className="my-2 h-px bg-white/[0.06]" />
+
+          <SettingRow
+            title={t("Фоновая проверка SMART")}
+            description={t("Раз в час, если приложение запущено с правами администратора. История и уведомления пополняются автоматически.")}
+          >
+            <Switch
+              label={t("Проверять SMART в фоне")}
+              checked={settings.smartBackground}
+              onChange={(value) => patch({ smartBackground: value })}
             />
           </SettingRow>
 
