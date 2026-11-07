@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::elevated;
-use crate::smart::SmartWarning;
+use crate::smart::{AtaAttribute, SmartProtocol, SmartWarning};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,6 +19,9 @@ pub struct DiskHealth {
     pub read_errors: Option<u64>,
     pub write_errors: Option<u64>,
     pub smart: bool,
+    pub protocol: Option<SmartProtocol>,
+    pub health_passed: Option<bool>,
+    pub attributes: Vec<AtaAttribute>,
     pub bus_type: Option<u16>,
     pub warnings: Vec<SmartWarning>,
     pub data_read: Option<u64>,
@@ -173,6 +176,11 @@ fn disks() -> Vec<DiskHealth> {
                 read_errors: counter.and_then(|item| item.read_errors),
                 write_errors: counter.and_then(|item| item.write_errors),
                 smart: smart.is_some(),
+                protocol: smart.map(|item| item.protocol),
+                health_passed: smart.and_then(|item| item.health_passed),
+                attributes: smart
+                    .map(|item| item.attributes.clone())
+                    .unwrap_or_default(),
                 bus_type: disk.bus_type,
                 warnings: smart.map(|item| item.warnings.clone()).unwrap_or_default(),
                 data_read: smart.and_then(|item| item.data_read),

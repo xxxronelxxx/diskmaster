@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/client/api";
 import { queryClient } from "@/client/rpc-client";
-import type { MaintenanceStatus, SmartDisk, SmartWarning } from "@/shared/types";
+import type { AtaAttribute, MaintenanceStatus, SmartDisk, SmartProtocol, SmartWarning } from "@/shared/types";
 import { formatBytes, formatCount, formatDate } from "@/client/lib/format";
 import { Badge, Button, Card, EmptyState, Modal, SectionTitle } from "./ui";
 import { SensorsPanel } from "./sensors-panel";
@@ -46,7 +46,81 @@ const SMART_WARNING_LABELS: Record<SmartWarning, string> = {
   readOnly: "диск только для чтения",
   volatileMemory: "сбой резервного питания",
   persistentMemory: "энергонезависимая память только для чтения",
+  predictFailure: "прогноз отказа диска",
 };
+
+const ATA_ATTRIBUTE_LABELS: Record<number, string> = {
+  1: "ошибки чтения",
+  5: "переназначенные сектора",
+  9: "часы работы",
+  12: "циклы включения",
+  174: "неожиданные отключения",
+  177: "износ",
+  179: "использованные резервные блоки",
+  187: "некорректируемые ошибки",
+  190: "температура воздуха",
+  192: "циклы парковки",
+  193: "циклы загрузки",
+  194: "температура",
+  197: "ожидающие сектора",
+  198: "офлайн-ошибки",
+  199: "ошибки CRC",
+  202: "остаток ресурса",
+  231: "остаток ресурса SSD",
+  232: "доступный резерв",
+  233: "износ SSD",
+  241: "записано (LBA)",
+  242: "прочитано (LBA)",
+};
+
+function protocolLabel(protocol: SmartProtocol | null): string {
+  if (protocol === "ata") return t("SATA SMART");
+  if (protocol === "nvme") return t("NVMe SMART");
+  return t("SMART");
+}
+
+function smartUnavailableText(busType: number | null): string {
+  if (busType === 7) return t("SMART недоступен: USB-мост не передаёт SMART.");
+  return t("SMART этого диска недоступен.");
+}
+
+function AtaAttributes({ attributes }: { attributes: AtaAttribute[] }) {
+  if (!attributes.length) return null;
+  return (
+    <details className="mt-1">
+      <summary className="cursor-pointer text-[10px] text-slate-500">{t("атрибуты SMART")}</summary>
+      <div className="mt-1 max-h-40 overflow-auto">
+        <table className="w-full border-collapse text-[10px]">
+          <thead className="text-slate-500">
+            <tr>
+              <th className="py-0.5 pr-2 text-left font-normal">ID</th>
+              <th className="py-0.5 pr-2 text-left font-normal">{t("атрибут")}</th>
+              <th className="py-0.5 text-right font-normal">{t("тек.")}</th>
+              <th className="py-0.5 text-right font-normal">{t("худш.")}</th>
+              <th className="py-0.5 text-right font-normal">{t("raw")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {attributes.map((attribute) => {
+              const label = ATA_ATTRIBUTE_LABELS[attribute.id];
+              return (
+                <tr key={attribute.id} className="border-t border-white/[0.05]">
+                  <td className="py-0.5 pr-2 text-slate-500">{attribute.id}</td>
+                  <td className="truncate py-0.5 pr-2 text-slate-300">
+                    {label ? t(label) : t("ID {id}", { id: attribute.id })}
+                  </td>
+                  <td className="py-0.5 text-right text-slate-300">{attribute.value}</td>
+                  <td className="py-0.5 text-right text-slate-500">{attribute.worst}</td>
+                  <td className="py-0.5 text-right text-slate-400">{formatCount(attribute.raw)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  );
+}
 
 function SmartWarningChips({ warnings, critical }: { warnings: SmartWarning[]; critical: number }) {
   if (!warnings.length) {
@@ -71,7 +145,9 @@ function SmartWarningChips({ warnings, critical }: { warnings: SmartWarning[]; c
 }
 
 function SmartDetails({
-  source,
+  protocol,
+  healthPassed,
+  attributes,
   availableSpare,
   spareThreshold,
   unsafeShutdowns,
@@ -80,7 +156,9 @@ function SmartDetails({
   dataRead,
   dataWritten,
 }: {
-  source: string;
+  protocol: SmartProtocol | null;
+  healthPassed: boolean | null;
+  attributes: AtaAttribute[];
   availableSpare: number | null;
   spareThreshold: number | null;
   unsafeShutdowns: number | null;
@@ -89,16 +167,21 @@ function SmartDetails({
   dataRead: number | null;
   dataWritten: number | null;
 }) {
-  const rows: Array<[string, string]> = [
-    [t("источник"), source],
-    [t("резерв"), availableSpare === null ? "—" : `${availableSpare}%`],
-    [t("порог резерва"), spareThreshold === null ? "—" : `${spareThreshold}%`],
-    [t("некорректных выключений"), unsafeShutdowns === null ? "—" : formatCount(unsafeShutdowns)],
-    [t("ошибок носителя"), mediaErrors === null ? "—" : formatCount(mediaErrors)],
-    [t("записей в журнале ошибок"), errorLogEntries === null ? "—" : formatCount(errorLogEntries)],
-    [t("записано"), dataWritten === null ? "—" : formatBytes(dataWritten, 1)],
-    [t("прочитано"), dataRead === null ? "—" : formatBytes(dataRead, 1)],
-  ];
+  const rows: Array<[string, string]> = [[t("источник"), protocolLabel(protocol)]];
+  if (healthPassed !== null) {
+    rows.push([t("прогноз SMART"), healthPassed ? t("здоров") : t("сбой")]);
+  }
+  if (availableSpare !== null) rows.push([t("резерв"), `${availableSpare}%`]);
+  if (spareThreshold !== null) rows.push([t("порог резерва"), `${spareThreshold}%`]);
+  if (unsafeShutdowns !== null) {
+    rows.push([t("некорректных выключений"), formatCount(unsafeShutdowns)]);
+  }
+  if (mediaErrors !== null) rows.push([t("ошибок носителя"), formatCount(mediaErrors)]);
+  if (errorLogEntries !== null) {
+    rows.push([t("записей в журнале ошибок"), formatCount(errorLogEntries)]);
+  }
+  if (dataWritten !== null) rows.push([t("записано"), formatBytes(dataWritten, 1)]);
+  if (dataRead !== null) rows.push([t("прочитано"), formatBytes(dataRead, 1)]);
   return (
     <details className="mt-1.5">
       <summary className="cursor-pointer text-[10px] text-slate-500">{t("подробнее")}</summary>
@@ -110,6 +193,7 @@ function SmartDetails({
           </div>
         ))}
       </dl>
+      <AtaAttributes attributes={attributes} />
     </details>
   );
 }
@@ -225,10 +309,13 @@ export function MaintenanceTab() {
                   {smartDisks.map((disk) => (
                     <div key={disk.index} className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-2.5">
                       <p className="truncate text-xs font-medium text-slate-100">
-                        {disk.model || t("NVMe-диск {index}", { index: disk.index })}
+                        {disk.model || t("Диск {index}", { index: disk.index })}
                       </p>
                       <p className="mt-1 text-[11px] text-slate-500">
-                        {t("NVMe")} · {formatBytes(disk.dataWritten ?? 0, 0)} {t("записано")}
+                        {protocolLabel(disk.protocol)}
+                        {disk.dataWritten !== null
+                          ? ` · ${formatBytes(disk.dataWritten, 0)} ${t("записано")}`
+                          : ""}
                         {disk.temperature !== null ? t(" · {value} °C", { value: disk.temperature }) : ""}
                         {disk.wear !== null ? t(" · износ {value}%", { value: disk.wear }) : ""}
                         {disk.powerOnHours !== null ? t(" · {value} ч", { value: disk.powerOnHours }) : ""}
@@ -236,7 +323,9 @@ export function MaintenanceTab() {
                       </p>
                       <SmartWarningChips warnings={disk.warnings} critical={disk.criticalWarning} />
                       <SmartDetails
-                        source={t("NVMe SMART")}
+                        protocol={disk.protocol}
+                        healthPassed={disk.healthPassed}
+                        attributes={disk.attributes}
                         availableSpare={disk.availableSpare}
                         spareThreshold={disk.spareThreshold}
                         unsafeShutdowns={disk.unsafeShutdowns}
@@ -263,6 +352,11 @@ export function MaintenanceTab() {
                           (item.serial !== "" && item.serial === disk.serial),
                       );
                   const hasSmart = disk.smart || Boolean(matched);
+                  const protocol = disk.protocol ?? matched?.protocol ?? null;
+                  const healthPassed = disk.healthPassed ?? matched?.healthPassed ?? null;
+                  const attributes = disk.attributes.length
+                    ? disk.attributes
+                    : (matched?.attributes ?? []);
                   const temperature = disk.temperature ?? matched?.temperature ?? null;
                   const wear = disk.wear ?? matched?.wear ?? null;
                   const hours = disk.powerOnHours ?? matched?.powerOnHours ?? null;
@@ -275,8 +369,9 @@ export function MaintenanceTab() {
                   const errorLogEntries = disk.errorLogEntries ?? matched?.errorLogEntries ?? null;
                   const dataRead = disk.dataRead ?? matched?.dataRead ?? null;
                   const dataWritten = disk.dataWritten ?? matched?.dataWritten ?? null;
+                  const smartChecked = smartDisks !== null || Boolean(status.elevated);
                   const unsupportedBus =
-                    !hasSmart && disk.busType !== null && disk.busType !== 17;
+                    !hasSmart && smartChecked && disk.busType !== null && disk.busType !== 17;
                   return (
                     <div key={disk.deviceId} className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-2.5">
                       <div className="flex items-center justify-between gap-2">
@@ -293,7 +388,9 @@ export function MaintenanceTab() {
                       {hasSmart ? <SmartWarningChips warnings={warnings} critical={critical} /> : null}
                       {hasSmart ? (
                         <SmartDetails
-                          source={t("NVMe SMART")}
+                          protocol={protocol}
+                          healthPassed={healthPassed}
+                          attributes={attributes}
                           availableSpare={availableSpare}
                           spareThreshold={spareThreshold}
                           unsafeShutdowns={unsafeShutdowns}
@@ -304,7 +401,7 @@ export function MaintenanceTab() {
                         />
                       ) : unsupportedBus ? (
                         <p className="mt-1 text-[10px] text-slate-500">
-                          {t("SMART пока поддерживается только для NVMe-дисков.")}
+                          {smartUnavailableText(disk.busType)}
                         </p>
                       ) : null}
                     </div>
@@ -329,9 +426,11 @@ export function MaintenanceTab() {
               </Button>
               {smartDisks !== null && smartDisks.length === 0 ? (
                 <p className="text-[11px] text-slate-500">
-                  {status?.disks.some((disk) => disk.busType !== null && disk.busType !== 17)
-                    ? t("SMART пока поддерживается только для NVMe-дисков.")
-                    : t("SMART не прочитан: NVMe-диск не найден или Windows не отдал журнал здоровья.")}
+                  {status?.disks.some((disk) => disk.busType === 7)
+                    ? smartUnavailableText(7)
+                    : status?.disks.length
+                      ? t("SMART этого диска недоступен.")
+                      : t("SMART не прочитан: NVMe-диск не найден или Windows не отдал журнал здоровья.")}
                 </p>
               ) : null}
             </div>

@@ -1,8 +1,8 @@
-//! Read-only NVMe SMART/health reader.
+//! Read-only SMART reader for NVMe and ATA drives.
 //!
 //! Windows requires administrator rights to open `\\.\PhysicalDriveN` and issue
-//! `IOCTL_STORAGE_QUERY_PROPERTY` with the NVMe health log page. The main app
-//! asks the elevated helper when it is not already running as administrator.
+//! the SMART IOCTLs. The main app asks the elevated helper when it is not already
+//! running as administrator.
 
 use std::ffi::c_void;
 
@@ -14,15 +14,25 @@ use windows_sys::Win32::Storage::FileSystem::{
 use windows_sys::Win32::System::IO::DeviceIoControl;
 
 const IOCTL_STORAGE_QUERY_PROPERTY: u32 = 0x002D_1400;
+const IOCTL_STORAGE_PREDICT_FAILURE: u32 = 0x002D_1100;
 const STORAGE_DEVICE_PROPERTY: u32 = 0;
 const STORAGE_DEVICE_PROTOCOL_SPECIFIC_PROPERTY: u32 = 50;
 const PROTOCOL_TYPE_NVME: u32 = 3;
 const NVME_DATA_TYPE_LOG_PAGE: u32 = 2;
 const NVME_LOG_PAGE_HEALTH: u32 = 0x02;
 const NVME_HEALTH_LOG_SIZE: usize = 512;
+const ATA_SMART_SIZE: usize = 512;
+const PREDICT_FAILURE_SIZE: usize = 4 + ATA_SMART_SIZE;
 const BUS_TYPE_NVME: u32 = 17;
 
-/// Critical Warning bits from the NVMe health log page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SmartProtocol {
+    Nvme,
+    Ata,
+}
+
+/// Warning conditions reported by the drive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SmartWarning {
@@ -32,6 +42,8 @@ pub enum SmartWarning {
     ReadOnly,
     VolatileMemory,
     PersistentMemory,
+    /// ATA SMART predicts a drive failure (`PredictFailure` from Windows).
+    PredictFailure,
 }
 
 impl SmartWarning {
@@ -51,6 +63,15 @@ impl SmartWarning {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AtaAttribute {
+    pub id: u8,
+    pub value: u8,
+    pub worst: u8,
+    pub raw: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SmartDisk {
@@ -58,8 +79,10 @@ pub struct SmartDisk {
     pub model: String,
     pub serial: String,
     pub bus_type: u32,
+    pub protocol: SmartProtocol,
     pub critical_warning: u8,
     pub warnings: Vec<SmartWarning>,
+    pub health_passed: Option<bool>,
     pub temperature: Option<u32>,
     pub available_spare: Option<u8>,
     pub spare_threshold: Option<u8>,
@@ -70,6 +93,7 @@ pub struct SmartDisk {
     pub error_log_entries: Option<u64>,
     pub data_read: Option<u64>,
     pub data_written: Option<u64>,
+    pub attributes: Vec<AtaAttribute>,
 }
 
 pub fn is_elevated() -> bool {
@@ -118,7 +142,7 @@ fn read_c_string(buffer: &[u8], offset: u32) -> Option<String> {
     )
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct Descriptor {
     model: String,
     serial: String,
@@ -224,6 +248,110 @@ fn query_nvme_health(handle: HANDLE) -> Option<Vec<u8>> {
     Some(output[start..start + NVME_HEALTH_LOG_SIZE].to_vec())
 }
 
+fn query_ata_smart(handle: HANDLE) -> Option<AtaSmart> {
+    let mut output = vec![0u8; PREDICT_FAILURE_SIZE];
+    let mut returned = 0u32;
+    let ok = unsafe {
+        DeviceIoControl(
+            handle,
+            IOCTL_STORAGE_PREDICT_FAILURE,
+            std::ptr::null(),
+            0,
+            output.as_mut_ptr() as *mut c_void,
+            output.len() as u32,
+            &mut returned,
+            std::ptr::null_mut(),
+        )
+    };
+    if ok == 0 || returned < PREDICT_FAILURE_SIZE as u32 {
+        return None;
+    }
+    let failure_predicted = u32::from_le_bytes(output[0..4].try_into().ok()?) != 0;
+    parse_ata_smart(&output[4..], failure_predicted)
+}
+
+fn le_u48(bytes: &[u8]) -> u64 {
+    let mut value = [0u8; 8];
+    value[..6].copy_from_slice(&bytes[..6]);
+    u64::from_le_bytes(value)
+}
+
+fn ata_checksum_ok(data: &[u8]) -> bool {
+    data.len() == ATA_SMART_SIZE && data.iter().fold(0u8, |sum, byte| sum.wrapping_add(*byte)) == 0
+}
+
+fn attribute_value(attributes: &[AtaAttribute], id: u8) -> Option<u64> {
+    attributes
+        .iter()
+        .find(|attribute| attribute.id == id)
+        .map(|attribute| attribute.raw)
+}
+
+fn parse_ata_smart(bytes: &[u8], failure_predicted: bool) -> Option<AtaSmart> {
+    if bytes.len() < ATA_SMART_SIZE {
+        return None;
+    }
+    let data = &bytes[..ATA_SMART_SIZE];
+    let revision = u16::from_le_bytes([data[0], data[1]]);
+    // Unsupported bridges often return zeros or 0xFF for the whole page.
+    if revision == 0 || revision == 0xFFFF || !ata_checksum_ok(data) {
+        return None;
+    }
+
+    let mut attributes = Vec::new();
+    for index in 0..30 {
+        let offset = 2 + index * 12;
+        let id = data[offset];
+        if id == 0 || id == 0xFF {
+            continue;
+        }
+        attributes.push(AtaAttribute {
+            id,
+            value: data[offset + 3],
+            worst: data[offset + 4],
+            raw: le_u48(&data[offset + 5..offset + 11]),
+        });
+    }
+    if attributes.is_empty() {
+        return None;
+    }
+    attributes.sort_by_key(|attribute| attribute.id);
+
+    let temperature = [194u8, 190u8].into_iter().find_map(|id| {
+        let current = (attribute_value(&attributes, id)? & 0xFF) as u32;
+        (1..=120).contains(&current).then_some(current)
+    });
+    // SATA SSDs expose remaining life under different vendor IDs; normalized
+    // values are 100 (new) to 0 (worn out).
+    let wear = [231u8, 233, 202, 177, 179].into_iter().find_map(|id| {
+        let value = attributes
+            .iter()
+            .find(|attribute| attribute.id == id)?
+            .value;
+        (value <= 100).then(|| 100u32 - u32::from(value))
+    });
+    let available_spare = attributes
+        .iter()
+        .find(|attribute| attribute.id == 232)
+        .map(|attribute| attribute.value)
+        .filter(|value| *value <= 100);
+    let power_on_hours = attribute_value(&attributes, 9);
+    let unsafe_shutdowns = attribute_value(&attributes, 174);
+    let media_errors =
+        attribute_value(&attributes, 187).or_else(|| attribute_value(&attributes, 198));
+
+    Some(AtaSmart {
+        health_passed: !failure_predicted,
+        temperature,
+        available_spare,
+        wear,
+        power_on_hours,
+        unsafe_shutdowns,
+        media_errors,
+        attributes,
+    })
+}
+
 fn le_u128(bytes: &[u8]) -> u128 {
     let mut value = [0u8; 16];
     value.copy_from_slice(&bytes[..16]);
@@ -277,6 +405,69 @@ struct SmartDiskFields {
     data_written: Option<u64>,
 }
 
+struct AtaSmart {
+    health_passed: bool,
+    temperature: Option<u32>,
+    available_spare: Option<u8>,
+    wear: Option<u32>,
+    power_on_hours: Option<u64>,
+    unsafe_shutdowns: Option<u64>,
+    media_errors: Option<u64>,
+    attributes: Vec<AtaAttribute>,
+}
+
+fn nvme_disk(index: u32, descriptor: &Descriptor, parsed: SmartDiskFields) -> SmartDisk {
+    SmartDisk {
+        index,
+        model: descriptor.model.clone(),
+        serial: descriptor.serial.clone(),
+        bus_type: descriptor.bus_type,
+        protocol: SmartProtocol::Nvme,
+        critical_warning: parsed.critical_warning,
+        warnings: parsed.warnings,
+        health_passed: None,
+        temperature: parsed.temperature,
+        available_spare: Some(parsed.available_spare),
+        spare_threshold: Some(parsed.spare_threshold),
+        wear: Some(u32::from(parsed.wear)),
+        power_on_hours: parsed.power_on_hours,
+        unsafe_shutdowns: parsed.unsafe_shutdowns,
+        media_errors: parsed.media_errors,
+        error_log_entries: parsed.error_log_entries,
+        data_read: parsed.data_read,
+        data_written: parsed.data_written,
+        attributes: Vec::new(),
+    }
+}
+
+fn ata_disk(index: u32, descriptor: &Descriptor, ata: AtaSmart) -> SmartDisk {
+    SmartDisk {
+        index,
+        model: descriptor.model.clone(),
+        serial: descriptor.serial.clone(),
+        bus_type: descriptor.bus_type,
+        protocol: SmartProtocol::Ata,
+        critical_warning: 0,
+        warnings: if ata.health_passed {
+            Vec::new()
+        } else {
+            vec![SmartWarning::PredictFailure]
+        },
+        health_passed: Some(ata.health_passed),
+        temperature: ata.temperature,
+        available_spare: ata.available_spare,
+        spare_threshold: None,
+        wear: ata.wear,
+        power_on_hours: ata.power_on_hours,
+        unsafe_shutdowns: ata.unsafe_shutdowns,
+        media_errors: ata.media_errors,
+        error_log_entries: None,
+        data_read: None,
+        data_written: None,
+        attributes: ata.attributes,
+    }
+}
+
 pub fn read_all() -> Vec<SmartDisk> {
     if !is_elevated() {
         return Vec::new();
@@ -287,40 +478,24 @@ pub fn read_all() -> Vec<SmartDisk> {
         let Some(handle) = open_drive(index) else {
             continue;
         };
-        let descriptor = query_descriptor(handle);
-        // Health log pages exist only for NVMe; skip other buses instead of
-        // issuing an IOCTL that cannot succeed. If the descriptor is
-        // unavailable, try anyway rather than hiding a working drive.
-        let is_nvme = descriptor
-            .as_ref()
-            .map(|item| item.bus_type == BUS_TYPE_NVME)
-            .unwrap_or(true);
-        let health = if is_nvme {
-            query_nvme_health(handle)
-        } else {
-            None
-        };
-        let descriptor = descriptor.unwrap_or_default();
-        if let Some(bytes) = health {
-            let parsed = parse_nvme_health(&bytes);
-            disks.push(SmartDisk {
-                index,
-                model: descriptor.model,
-                serial: descriptor.serial,
-                bus_type: descriptor.bus_type,
-                critical_warning: parsed.critical_warning,
-                warnings: parsed.warnings,
-                temperature: parsed.temperature,
-                available_spare: Some(parsed.available_spare),
-                spare_threshold: Some(parsed.spare_threshold),
-                wear: Some(parsed.wear as u32),
-                power_on_hours: parsed.power_on_hours,
-                unsafe_shutdowns: parsed.unsafe_shutdowns,
-                media_errors: parsed.media_errors,
-                error_log_entries: parsed.error_log_entries,
-                data_read: parsed.data_read,
-                data_written: parsed.data_written,
-            });
+        let descriptor = query_descriptor(handle).unwrap_or_default();
+        let mut smart = None;
+
+        // NVMe health log pages, or an unknown bus where the descriptor failed.
+        if descriptor.bus_type == BUS_TYPE_NVME || descriptor.bus_type == 0 {
+            if let Some(bytes) = query_nvme_health(handle) {
+                smart = Some(nvme_disk(index, &descriptor, parse_nvme_health(&bytes)));
+            }
+        }
+        // ATA/SATA SMART data, including drives behind USB bridges when supported.
+        if smart.is_none() && descriptor.bus_type != BUS_TYPE_NVME {
+            if let Some(ata) = query_ata_smart(handle) {
+                smart = Some(ata_disk(index, &descriptor, ata));
+            }
+        }
+
+        if let Some(disk) = smart {
+            disks.push(disk);
         }
         unsafe { CloseHandle(handle) };
     }
@@ -329,7 +504,7 @@ pub fn read_all() -> Vec<SmartDisk> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_nvme_health, to_u64, SmartWarning};
+    use super::{parse_ata_smart, parse_nvme_health, to_u64, AtaAttribute, SmartWarning};
 
     fn sample() -> [u8; 512] {
         let mut bytes = [0u8; 512];
@@ -344,6 +519,43 @@ mod tests {
         bytes[144..160].copy_from_slice(&39u128.to_le_bytes());
         bytes[160..176].copy_from_slice(&7u128.to_le_bytes());
         bytes[176..192].copy_from_slice(&2u128.to_le_bytes());
+        bytes
+    }
+
+    fn put_ata_attribute(
+        bytes: &mut [u8; 512],
+        index: usize,
+        id: u8,
+        value: u8,
+        worst: u8,
+        raw: u64,
+    ) {
+        let offset = 2 + index * 12;
+        bytes[offset] = id;
+        bytes[offset + 3] = value;
+        bytes[offset + 4] = worst;
+        bytes[offset + 5..offset + 11].copy_from_slice(&raw.to_le_bytes()[..6]);
+    }
+
+    fn ata_sample() -> [u8; 512] {
+        let mut bytes = [0u8; 512];
+        bytes[0] = 0x00;
+        bytes[1] = 0x01; // revision 0x0100
+        put_ata_attribute(&mut bytes, 0, 5, 100, 100, 0);
+        put_ata_attribute(&mut bytes, 1, 9, 90, 90, 12_000);
+        put_ata_attribute(&mut bytes, 2, 174, 100, 100, 7);
+        put_ata_attribute(&mut bytes, 3, 187, 100, 100, 3);
+        put_ata_attribute(&mut bytes, 4, 194, 60, 50, 40);
+        put_ata_attribute(&mut bytes, 5, 197, 100, 100, 2);
+        put_ata_attribute(&mut bytes, 6, 198, 100, 100, 1);
+        put_ata_attribute(&mut bytes, 7, 199, 100, 100, 9);
+        put_ata_attribute(&mut bytes, 8, 231, 97, 97, 0);
+        put_ata_attribute(&mut bytes, 9, 232, 100, 100, 0);
+        put_ata_attribute(&mut bytes, 10, 241, 100, 100, 123_456);
+        let sum = bytes[..511]
+            .iter()
+            .fold(0u8, |sum, byte| sum.wrapping_add(*byte));
+        bytes[511] = 0u8.wrapping_sub(sum);
         bytes
     }
 
@@ -400,6 +612,10 @@ mod tests {
             serde_json::to_string(&SmartWarning::PersistentMemory).unwrap(),
             "\"persistentMemory\""
         );
+        assert_eq!(
+            serde_json::to_string(&SmartWarning::PredictFailure).unwrap(),
+            "\"predictFailure\""
+        );
     }
 
     #[test]
@@ -408,5 +624,42 @@ mod tests {
         bytes[1] = 0xFF;
         bytes[2] = 0xFF;
         assert_eq!(parse_nvme_health(&bytes).temperature, None);
+    }
+
+    #[test]
+    fn parses_ata_smart_attributes() {
+        let parsed = parse_ata_smart(&ata_sample(), false).expect("valid ATA page");
+        assert!(parsed.health_passed);
+        assert_eq!(parsed.temperature, Some(40));
+        assert_eq!(parsed.wear, Some(3));
+        assert_eq!(parsed.available_spare, Some(100));
+        assert_eq!(parsed.power_on_hours, Some(12_000));
+        assert_eq!(parsed.unsafe_shutdowns, Some(7));
+        assert_eq!(parsed.media_errors, Some(3));
+        assert_eq!(parsed.attributes.len(), 11);
+        assert_eq!(
+            parsed.attributes[0],
+            AtaAttribute {
+                id: 5,
+                value: 100,
+                worst: 100,
+                raw: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn ata_checksum_and_empty_pages_are_rejected() {
+        let mut bytes = ata_sample();
+        bytes[100] = bytes[100].wrapping_add(1);
+        assert!(parse_ata_smart(&bytes, false).is_none());
+        assert!(parse_ata_smart(&[0u8; 512], false).is_none());
+        assert!(parse_ata_smart(&[0xFFu8; 512], false).is_none());
+    }
+
+    #[test]
+    fn ata_failure_prediction_is_reported() {
+        let parsed = parse_ata_smart(&ata_sample(), true).expect("valid ATA page");
+        assert!(!parsed.health_passed);
     }
 }

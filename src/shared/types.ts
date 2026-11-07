@@ -378,6 +378,9 @@ export type DiskHealth = {
   readErrors: number | null;
   writeErrors: number | null;
   smart: boolean;
+  protocol: SmartProtocol | null;
+  healthPassed: boolean | null;
+  attributes: AtaAttribute[];
   busType: number | null;
   warnings: SmartWarning[];
   dataRead: number | null;
@@ -390,21 +393,34 @@ export type DiskHealth = {
   unsafeShutdowns: number | null;
 };
 
+export type SmartProtocol = "nvme" | "ata";
+
+export type AtaAttribute = {
+  id: number;
+  value: number;
+  worst: number;
+  raw: number;
+};
+
 export type SmartWarning =
   | "availableSpare"
   | "temperature"
   | "reliability"
   | "readOnly"
   | "volatileMemory"
-  | "persistentMemory";
+  | "persistentMemory"
+  | "predictFailure";
 
 export type SmartDisk = {
   index: number;
   model: string;
   serial: string;
   busType: number;
+  protocol: SmartProtocol;
   criticalWarning: number;
   warnings: SmartWarning[];
+  healthPassed: boolean | null;
+  attributes: AtaAttribute[];
   temperature: number | null;
   availableSpare: number | null;
   spareThreshold: number | null;

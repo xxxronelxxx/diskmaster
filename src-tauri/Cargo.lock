@@ -891,7 +891,7 @@ dependencies = [
 
 [[package]]
 name = "disk-master"
-version = "1.9.1"
+version = "1.10.0"
 dependencies = [
  "arboard",
  "blake3",
