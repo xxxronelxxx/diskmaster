@@ -238,7 +238,9 @@ export function CleanupTab({
             <div className="flex items-center gap-2 text-sm text-slate-100">
               <SpinnerIcon className="size-4 text-sky-300" />
               {job.phase === "large-files" ? t("Ищем большие файлы…") : t("Сканируем диск…")}
-              <span className="font-semibold tabular-nums text-white">{job.percent}%</span>
+              <span className="font-semibold tabular-nums text-white">
+                {Math.min(100, Math.max(0, job.percent))}%
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-400">

@@ -464,8 +464,14 @@ fn run_scan(shared: AppState, threshold: u64) {
                 .unwrap_or_else(|| def.name.into());
         }
 
-        let (bytes, files, status, error) =
-            measure_category(shared.clone(), def, index, files_done, bytes_done);
+        let (bytes, files, status, error) = measure_category(
+            shared.clone(),
+            def,
+            index,
+            definitions.len(),
+            files_done,
+            bytes_done,
+        );
         files_done += files;
         bytes_done += bytes;
 
@@ -662,10 +668,15 @@ fn is_skipped_large_file(path: &Path, is_home: bool, root: &Path) -> bool {
     false
 }
 
+fn category_percent(index: usize, total: usize) -> u32 {
+    (((index as f64 + 0.5) / total.max(1) as f64) * 60.0).min(59.0) as u32
+}
+
 fn measure_category(
     shared: AppState,
     def: &CategoryDef,
     index: usize,
+    total_categories: usize,
     files_done: u64,
     bytes_done: u64,
 ) -> (u64, u64, String, Option<String>) {
@@ -725,8 +736,7 @@ fn measure_category(
                 let mut guard = shared_for_progress.scan.lock().unwrap();
                 if let Some(job) = guard.as_mut() {
                     job.scan_path = current.to_string_lossy().to_string();
-                    let percent =
-                        ((index as f64 + 0.5) / def.paths.len().max(1) as f64 * 60.0) as u32;
+                    let percent = category_percent(index, total_categories);
                     job.percent = job.percent.max(percent);
                 }
             },
@@ -1241,5 +1251,13 @@ mod tests {
             true,
             Path::new(r"C:\Users\me")
         ));
+    }
+
+    #[test]
+    fn category_progress_stays_below_sixty() {
+        for index in 0..12 {
+            assert!(super::category_percent(index, 12) <= 59);
+        }
+        assert!(super::category_percent(99, 0) <= 59);
     }
 }

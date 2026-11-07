@@ -233,7 +233,9 @@ export function LargeFilesTab({
               {t("Поиск файлов больше")} {threshold} {t("МБ…")}
             </span>
             <div className="flex items-center gap-2">
-              <span className="tabular-nums text-slate-400">{job.percent}%</span>
+              <span className="tabular-nums text-slate-400">
+                {Math.min(100, Math.max(0, job.percent))}%
+              </span>
               <Button size="sm" variant="danger" onClick={onCancel}>
                 {t("Остановить")}
               </Button>
