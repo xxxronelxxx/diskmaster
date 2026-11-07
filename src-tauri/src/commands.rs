@@ -255,6 +255,14 @@ pub struct ScanStatusInput {
 }
 
 #[tauri::command]
+pub fn scan_cancel(state: State<AppState>) -> bool {
+    state
+        .scan_cancel
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    true
+}
+
+#[tauri::command]
 pub async fn scan_status(
     state: State<'_, AppState>,
     input: ScanStatusInput,

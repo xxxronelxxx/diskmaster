@@ -143,6 +143,7 @@ function App() {
   });
 
   const startScanMutation = useMutation(queryClient.system.startScan.mutationOptions());
+  const cancelScanMutation = useMutation({ mutationFn: () => api.scanCancel() });
 
   const scanJob = (scanQuery.data as ScanState | null | undefined) ?? null;
   const scanRunning = Boolean(scanJob && !scanJob.finishedAt) || startScanMutation.isPending;
@@ -370,6 +371,7 @@ function App() {
                 job={scanJob}
                 starting={startScanMutation.isPending}
                 onStart={() => startScan()}
+                onCancel={() => cancelScanMutation.mutate()}
                 onCleaned={() => void overviewQuery.refetch()}
                 admin={Boolean(info?.admin)}
               />
@@ -382,6 +384,7 @@ function App() {
                 job={scanJob}
                 starting={startScanMutation.isPending}
                 onStart={(thresholdMb) => startScan(thresholdMb)}
+                onCancel={() => cancelScanMutation.mutate()}
                 onDeleted={() => void overviewQuery.refetch()}
               />
             ) : null}

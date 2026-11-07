@@ -20,34 +20,11 @@ struct MeasureResult {
 }
 
 fn measure(target: &Path, budget: Duration) -> MeasureResult {
-    let deadline = Instant::now() + budget;
-    let mut size = 0u64;
-    let mut files = 0u64;
-    let mut truncated = false;
-
-    for entry in jwalk::WalkDir::new(target)
-        .max_depth(24)
-        .skip_hidden(false)
-        .into_iter()
-        .filter_map(Result::ok)
-    {
-        if Instant::now() > deadline {
-            truncated = true;
-            break;
-        }
-        if !entry.file_type().is_file() {
-            continue;
-        }
-        if let Ok(metadata) = entry.metadata() {
-            size += metadata.len();
-            files += 1;
-        }
-    }
-
+    let stats = crate::walk::walk(target, Some(24), budget, None, |_| {}, |_, _, _| {});
     MeasureResult {
-        size,
-        files,
-        truncated,
+        size: stats.bytes,
+        files: stats.files,
+        truncated: stats.truncated,
     }
 }
 
@@ -190,6 +167,14 @@ pub fn analyze(shared: &AppState, target: Option<String>) -> FolderAnalysis {
     entries.truncate(MAX_ENTRIES);
     result.entries = entries;
     result.elapsed_ms = started.elapsed().as_millis() as u64;
+    if result.elapsed_ms > 1_000 {
+        crate::logging::log(&format!(
+            "folders: {} ms, entries={}, truncated={}",
+            result.elapsed_ms,
+            result.entries.len(),
+            result.truncated
+        ));
+    }
 
     {
         let mut allow = shared.allow.lock().unwrap();

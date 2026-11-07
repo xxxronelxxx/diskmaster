@@ -335,56 +335,23 @@ fn walk(
     root: &Path,
     max_depth: Option<usize>,
     budget: Duration,
-    mut on_file: impl FnMut(&Path, &fs::Metadata),
+    cancel: Option<&std::sync::atomic::AtomicBool>,
+    mut on_file: impl FnMut(&crate::walk::WalkEntry),
     mut on_progress: impl FnMut(u64, u64, &Path),
 ) -> WalkResult {
-    let started = Instant::now();
-    let mut files = 0u64;
-    let mut bytes = 0u64;
-    let mut timed_out = false;
-    let mut denied = 0u64;
-    let mut last_report = Instant::now();
-    let mut walker = jwalk::WalkDir::new(root).skip_hidden(false);
-    if let Some(depth) = max_depth {
-        walker = walker.max_depth(depth);
-    }
-
-    for entry in walker.into_iter() {
-        if started.elapsed() > budget {
-            timed_out = true;
-            break;
-        }
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(_) => {
-                // jwalk surfaces unreadable directories (ACL, locked files) as
-                // errors; they are exactly what the "needs admin" hint is for.
-                denied += 1;
-                continue;
-            }
-        };
-        let file_type = entry.file_type();
-        if !file_type.is_file() {
-            continue;
-        }
-        let Ok(metadata) = entry.metadata() else {
-            denied += 1;
-            continue;
-        };
-        files += 1;
-        bytes += metadata.len();
-        on_file(&entry.path(), &metadata);
-        if last_report.elapsed() > Duration::from_millis(250) {
-            last_report = Instant::now();
-            on_progress(files, bytes, &entry.path());
-        }
-    }
-
+    let stats = crate::walk::walk(
+        root,
+        max_depth,
+        budget,
+        cancel,
+        &mut on_file,
+        &mut on_progress,
+    );
     WalkResult {
-        files,
-        bytes,
-        timed_out,
-        denied,
+        files: stats.files,
+        bytes: stats.bytes,
+        timed_out: stats.truncated,
+        denied: stats.denied,
     }
 }
 
@@ -404,6 +371,9 @@ pub fn start_scan(shared: &AppState, threshold_mb: Option<f64>) -> ScanState {
 
     // A new scan invalidates paths from the previous one.
     shared.allow.lock().unwrap().clear();
+    shared
+        .scan_cancel
+        .store(false, std::sync::atomic::Ordering::SeqCst);
 
     let threshold = ((threshold_mb.unwrap_or(200.0) as u64) * MB).max(LARGE_FILE_THRESHOLD_MIN);
     let definitions = categories();
@@ -416,6 +386,7 @@ pub fn start_scan(shared: &AppState, threshold_mb: Option<f64>) -> ScanState {
         job_id: new_id(),
         started_at: chrono::Utc::now().timestamp_millis(),
         finished_at: None,
+        canceled: false,
         phase: "starting".into(),
         percent: 0,
         scan_path: String::new(),
@@ -441,6 +412,23 @@ pub fn start_scan(shared: &AppState, threshold_mb: Option<f64>) -> ScanState {
     job
 }
 
+fn mark_canceled(shared: &AppState) {
+    let mut guard = shared.scan.lock().unwrap();
+    if let Some(job) = guard.as_mut() {
+        job.phase = "canceled".into();
+        job.canceled = true;
+        job.finished_at = Some(chrono::Utc::now().timestamp_millis());
+        job.scan_path.clear();
+        crate::logging::log("scan canceled");
+    }
+}
+
+fn is_canceled(shared: &AppState) -> bool {
+    shared
+        .scan_cancel
+        .load(std::sync::atomic::Ordering::Relaxed)
+}
+
 fn new_id() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let nanos = SystemTime::now()
@@ -451,6 +439,7 @@ fn new_id() -> String {
 }
 
 fn run_scan(shared: AppState, threshold: u64) {
+    let scan_started = Instant::now();
     {
         if let Some(job) = shared.scan.lock().unwrap().as_mut() {
             job.phase = "junk".into();
@@ -495,6 +484,16 @@ fn run_scan(shared: AppState, threshold: u64) {
         job.percent = ((index + 1) as f64 / definitions.len() as f64 * 60.0).round() as u32;
     }
 
+    crate::logging::log(&format!(
+        "scan junk phase: {} ms",
+        scan_started.elapsed().as_millis()
+    ));
+
+    if is_canceled(&shared) {
+        mark_canceled(&shared);
+        return;
+    }
+
     // Announce the large-file phase before starting the (slower) walk.
     {
         let mut guard = shared.scan.lock().unwrap();
@@ -535,31 +534,28 @@ fn run_scan(shared: AppState, threshold: u64) {
             root,
             Some(max_depth),
             budget,
-            |path, metadata| {
-                if metadata.len() < limit {
+            Some(&shared.scan_cancel),
+            |entry| {
+                if entry.size < limit {
                     return;
                 }
-                if is_skipped_large_file(path, is_home, root) {
+                if is_skipped_large_file(&entry.path, is_home, root) {
                     return;
                 }
-                let modified = metadata
-                    .modified()
-                    .ok()
-                    .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|value| value.as_millis() as i64)
-                    .unwrap_or(0);
                 collected_ref.lock().unwrap().push(LargeFile {
-                    path: path.to_string_lossy().to_string(),
-                    name: path
+                    path: entry.path.to_string_lossy().to_string(),
+                    name: entry
+                        .path
                         .file_name()
                         .map(|name| name.to_string_lossy().to_string())
                         .unwrap_or_default(),
-                    dir: path
+                    dir: entry
+                        .path
                         .parent()
                         .map(|parent| parent.to_string_lossy().to_string())
                         .unwrap_or_default(),
-                    size: metadata.len(),
-                    modified,
+                    size: entry.size,
+                    modified: entry.modified,
                 });
             },
             |files, bytes, current| {
@@ -588,6 +584,10 @@ fn run_scan(shared: AppState, threshold: u64) {
                     (60.0 + ((root_index + 1) as f64 / roots_len as f64 * 39.0)).min(99.0) as u32;
             }
         }
+        if is_canceled(&shared) {
+            mark_canceled(&shared);
+            return;
+        }
     }
 
     let mut all = collected.lock().unwrap().clone();
@@ -612,10 +612,11 @@ fn run_scan(shared: AppState, threshold: u64) {
         job.scan_path = String::new();
         job.finished_at = Some(chrono::Utc::now().timestamp_millis());
         crate::logging::log(&format!(
-            "scan done junk_bytes={} junk_files={} large={}",
+            "scan done junk_bytes={} junk_files={} large={} total={} ms",
             job.total_junk_bytes,
             job.total_junk_files,
-            job.large_files.len()
+            job.large_files.len(),
+            scan_started.elapsed().as_millis()
         ));
     }
 }
@@ -718,7 +719,8 @@ fn measure_category(
             target,
             None,
             budget,
-            |_path, _meta| {},
+            Some(&shared.scan_cancel),
+            |_entry| {},
             |_files, _bytes, current| {
                 let mut guard = shared_for_progress.scan.lock().unwrap();
                 if let Some(job) = guard.as_mut() {
@@ -786,7 +788,8 @@ fn dir_size(path: &Path) -> u64 {
         path,
         None,
         Duration::from_secs(8),
-        |_path, _meta| {},
+        None,
+        |_entry| {},
         |_files, _bytes, _current| {},
     )
     .bytes
@@ -1111,13 +1114,14 @@ pub fn preview_categories(ids: &[String], limit: usize) -> Vec<PreviewCategory> 
                     target,
                     None,
                     Duration::from_secs(8),
-                    |path, metadata| {
-                        if crate::guard::matches_protected(path, &protected) {
+                    None,
+                    |entry| {
+                        if crate::guard::matches_protected(&entry.path, &protected) {
                             return;
                         }
                         entries.push(PreviewEntry {
-                            path: path.to_string_lossy().to_string(),
-                            size: metadata.len(),
+                            path: entry.path.to_string_lossy().to_string(),
+                            size: entry.size,
                         });
                     },
                     |_files, _bytes, _current| {},
@@ -1176,7 +1180,8 @@ pub fn estimate_bytes(ids: &[String]) -> u64 {
                 target,
                 None,
                 Duration::from_secs(4),
-                |_path, _meta| {},
+                None,
+                |_entry| {},
                 |_files, _bytes, _current| {},
             );
             total = total.saturating_add(result.bytes);

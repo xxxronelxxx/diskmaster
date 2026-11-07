@@ -15,11 +15,13 @@ export function LargeFilesTab({
   job,
   starting,
   onStart,
+  onCancel,
   onDeleted,
 }: {
   job: ScanState | null;
   starting: boolean;
   onStart: (thresholdMb: number) => void;
+  onCancel: () => void;
   onDeleted: () => void;
 }) {
   const [pickedThreshold, setPickedThreshold] = useState<number | null>(null);
@@ -36,6 +38,7 @@ export function LargeFilesTab({
   const deleteMutation = useMutation(queryClient.system.deleteLargeFiles.mutationOptions());
 
   const [query, setQuery] = useState("");
+  const [renderLimit, setRenderLimit] = useState(200);
   const [extension, setExtension] = useState<string | null>(null);
   const [age, setAge] = useState<"all" | "6" | "12">("all");
   const [exporting, setExporting] = useState(false);
@@ -74,6 +77,7 @@ export function LargeFilesTab({
   });
 
   const selectedFiles = visibleFiles.filter((file) => selected.has(file.path));
+  const renderedFiles = visibleFiles.slice(0, renderLimit);
   const selectedBytes = selectedFiles.reduce((sum, file) => sum + file.size, 0);
   const totalBytes = visibleFiles.reduce((sum, file) => sum + file.size, 0);
   const allSelected = visibleFiles.length > 0 && visibleFiles.every((file) => selected.has(file.path));
@@ -198,15 +202,26 @@ export function LargeFilesTab({
 
       {scanning && job ? (
         <Card className="p-4">
-          <div className="flex items-center justify-between text-sm">
+          <div className="flex items-center justify-between gap-2 text-sm">
             <span className="flex items-center gap-2 text-slate-100">
               <SpinnerIcon className="size-4 text-sky-300" />
               {t("Поиск файлов больше")} {threshold} {t("МБ…")}
             </span>
-            <span className="tabular-nums text-slate-400">{job.percent}%</span>
+            <div className="flex items-center gap-2">
+              <span className="tabular-nums text-slate-400">{job.percent}%</span>
+              <Button size="sm" variant="danger" onClick={onCancel}>
+                {t("Остановить")}
+              </Button>
+            </div>
           </div>
           <Progress className="mt-3" value={job.percent} tone="violet" />
           <p className="mt-2 truncate font-mono text-[11px] text-slate-500">{job.scanPath}</p>
+        </Card>
+      ) : null}
+
+      {job?.canceled ? (
+        <Card className="border-amber-400/25 bg-amber-400/[0.06] p-4 text-sm text-amber-100">
+          {t("Сканирование отменено.")}
         </Card>
       ) : null}
 
@@ -283,12 +298,12 @@ export function LargeFilesTab({
           </div>
 
           <div className="divide-y divide-white/[0.06]">
-            {visibleFiles.map((file) => {
+            {renderedFiles.map((file) => {
               const checked = selected.has(file.path);
               return (
                 <label
                   key={file.path}
-                  className={`flex cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors ${
+                  className={`flex cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors [contain-intrinsic-size:56px] [content-visibility:auto] ${
                     checked ? "bg-emerald-500/[0.06]" : "hover:bg-white/[0.03]"
                   }`}
                 >
@@ -325,6 +340,17 @@ export function LargeFilesTab({
                 </label>
               );
             })}
+            {visibleFiles.length > renderedFiles.length ? (
+              <div className="flex justify-center border-t border-white/[0.06] p-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setRenderLimit((current) => current + 200)}
+                >
+                  {t("Показать ещё 200")}
+                </Button>
+              </div>
+            ) : null}
           </div>
         </Card>
       ) : null}

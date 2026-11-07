@@ -27,6 +27,7 @@ mod startup;
 mod state;
 mod system;
 mod types;
+mod walk;
 mod widget;
 mod win_text;
 mod winget;
@@ -763,6 +764,7 @@ fn main() {
             commands::metrics,
             commands::kill_process,
             commands::start_scan,
+            commands::scan_cancel,
             commands::scan_status,
             commands::clean_junk,
             commands::clean_dry_run,

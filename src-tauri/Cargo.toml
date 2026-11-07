@@ -1,6 +1,6 @@
 [package]
 name = "disk-master"
-version = "1.13.1"
+version = "1.14.0"
 description = "Очистка диска, анализ места и мониторинг Windows"
 authors = ["Development SPB"]
 edition = "2021"
@@ -42,7 +42,6 @@ chrono = "0.4"
 wait-timeout = "0.2"
 wmi = "0.18"
 arboard = "3"
-jwalk = "0.8"
 
 [profile.release]
 codegen-units = 1

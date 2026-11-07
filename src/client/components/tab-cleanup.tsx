@@ -94,12 +94,14 @@ export function CleanupTab({
   job,
   starting,
   onStart,
+  onCancel,
   onCleaned,
   admin,
 }: {
   job: ScanState | null;
   starting: boolean;
   onStart: () => void;
+  onCancel: () => void;
   onCleaned: () => void;
   admin: boolean;
 }) {
@@ -238,9 +240,14 @@ export function CleanupTab({
               {job.phase === "large-files" ? t("Ищем большие файлы…") : t("Сканируем диск…")}
               <span className="font-semibold tabular-nums text-white">{job.percent}%</span>
             </div>
-            <span className="text-xs text-slate-400">
-              {formatCount(job.filesScanned)} {t("файлов ·")} {formatBytes(job.bytesScanned)}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400">
+                {formatCount(job.filesScanned)} {t("файлов ·")} {formatBytes(job.bytesScanned)}
+              </span>
+              <Button size="sm" variant="danger" onClick={onCancel}>
+                {t("Остановить")}
+              </Button>
+            </div>
           </div>
           <Progress className="mt-3" value={job.percent} tone="sky" />
           <p className="mt-2 truncate font-mono text-[11px] text-slate-500" title={job.scanPath}>
@@ -252,6 +259,12 @@ export function CleanupTab({
       {job?.phase === "error" ? (
         <Card className="border-rose-400/30 bg-rose-500/[0.07] p-4 text-sm text-rose-200">
           {t("Сканирование прервано:")} {job.error}
+        </Card>
+      ) : null}
+
+      {job?.canceled ? (
+        <Card className="border-amber-400/25 bg-amber-400/[0.06] p-4 text-sm text-amber-100">
+          {t("Сканирование отменено.")}
         </Card>
       ) : null}
 

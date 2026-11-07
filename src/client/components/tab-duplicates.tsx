@@ -26,6 +26,7 @@ export function DuplicatesTab() {
       return [];
     }
   });
+  const [groupLimit, setGroupLimit] = useState(100);
   const [strategy, setStrategy] = useState<"first" | "newest" | "oldest" | "shortest">(
     () => (localStorage.getItem("dm.dup.strategy") as "first" | "newest" | "oldest" | "shortest") || "first",
   );
@@ -53,6 +54,7 @@ export function DuplicatesTab() {
   }, [scan, removed]);
 
   const totalWasted = groups.reduce((sum, group) => sum + group.wasted, 0);
+  const renderedGroups = groups.slice(0, groupLimit);
 
   async function runScan() {
     setNote(null);
@@ -351,8 +353,11 @@ export function DuplicatesTab() {
       ) : null}
 
       <div className="space-y-2">
-        {groups.map((group) => (
-          <Card key={group.hash} className="overflow-hidden">
+        {renderedGroups.map((group) => (
+          <Card
+            key={group.hash}
+            className="overflow-hidden [contain-intrinsic-size:140px] [content-visibility:auto]"
+          >
             <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.07] px-4 py-2.5">
               <Badge variant="info">{formatBytes(group.size)}</Badge>
               <span className="text-xs text-slate-300">{group.files.length} {t("копии")}</span>
@@ -415,6 +420,13 @@ export function DuplicatesTab() {
             </div>
           </Card>
         ))}
+        {groups.length > renderedGroups.length ? (
+          <div className="flex justify-center pt-2">
+            <Button size="sm" variant="secondary" onClick={() => setGroupLimit((current) => current + 100)}>
+              {t("Показать ещё 100")}
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       <Modal

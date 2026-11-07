@@ -19,6 +19,7 @@ pub struct UpdateCache {
 #[derive(Clone)]
 pub struct AppState {
     pub scan: Arc<Mutex<Option<ScanState>>>,
+    pub scan_cancel: Arc<std::sync::atomic::AtomicBool>,
     pub allow: Arc<Mutex<AllowList>>,
     pub duplicates: Arc<Mutex<DuplicateState>>,
     pub programs: Arc<Mutex<Option<ProgramCache>>>,
@@ -30,6 +31,7 @@ impl AppState {
     pub fn new() -> Self {
         Self {
             scan: Arc::new(Mutex::new(None)),
+            scan_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             allow: Arc::new(Mutex::new(AllowList::new())),
             duplicates: Arc::new(Mutex::new(DuplicateState::default())),
             programs: Arc::new(Mutex::new(None)),

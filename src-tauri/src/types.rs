@@ -104,6 +104,7 @@ pub struct ScanState {
     pub job_id: String,
     pub started_at: i64,
     pub finished_at: Option<i64>,
+    pub canceled: bool,
     pub phase: String,
     pub percent: u32,
     pub scan_path: String,

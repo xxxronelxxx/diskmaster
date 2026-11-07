@@ -71,6 +71,7 @@ export const api = {
 
   startScan: (input?: { thresholdMb?: number }) => invoke<ScanState>("start_scan", payload(input)),
   scanStatus: (input: { jobId: string }) => invoke<ScanState | null>("scan_status", { input }),
+  scanCancel: () => invoke<boolean>("scan_cancel"),
   cleanJunk: (input: { categories: string[] }) => invoke<CleanResult>("clean_junk", { input }),
   cleanDryRun: (input: { categories: string[] }) => invoke<CleanResult>("clean_dry_run", { input }),
   previewClean: (input: { categories: string[] }) => invoke<CleanPreview>("preview_clean", { input }),
@@ -226,7 +227,11 @@ export const queryClient = {
     autostartSet: { mutationOptions: mutation<{ enabled: boolean }, { ok: boolean; error?: string }>("autostart_set") },
     notificationTest: { mutationOptions: mutation<Record<string, never> | undefined, { ok: boolean; error?: string }>("notification_test") },
 
-    maintenanceStatus: { queryOptions: () => query<MaintenanceStatus>("maintenance_status") },
-    driversList: { queryOptions: () => query<DriverPackage[]>("drivers_list") },
+    maintenanceStatus: {
+      queryOptions: () => ({ ...query<MaintenanceStatus>("maintenance_status"), staleTime: 5_000 }),
+    },
+    driversList: {
+      queryOptions: () => ({ ...query<DriverPackage[]>("drivers_list"), staleTime: 30_000 }),
+    },
   },
 };

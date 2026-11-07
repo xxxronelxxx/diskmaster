@@ -98,6 +98,7 @@ export type ScanState = {
   jobId: string;
   startedAt: number;
   finishedAt: number | null;
+  canceled: boolean;
   phase: ScanPhase;
   percent: number;
   scanPath: string;
