@@ -11,6 +11,7 @@ import {
   GaugeIcon,
   MoonIcon,
   PackageIcon,
+  PulseIcon,
   RefreshIcon,
   SettingsIcon,
   ShieldIcon,
@@ -66,7 +67,7 @@ type TabDef = {
 
 const TABS: TabDef[] = [
   { id: "overview", label: "Обзор", icon: GaugeIcon, group: "Система" },
-  { id: "monitor", label: "Мониторинг", icon: GaugeIcon, group: "Система" },
+  { id: "monitor", label: "Мониторинг", icon: PulseIcon, group: "Система" },
   { id: "history", label: "История места", icon: RefreshIcon, group: "Система" },
   { id: "maintenance", label: "Обслуживание", icon: ShieldIcon, group: "Система" },
   { id: "drivers", label: "Драйверы", icon: DriverIcon, group: "Система" },

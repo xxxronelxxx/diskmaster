@@ -127,6 +127,14 @@ export function DownloadIcon({ className = "size-4" }: IconProps) {
   );
 }
 
+export function PulseIcon({ className = "size-4" }: IconProps) {
+  return (
+    <svg className={`${base} ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12h4l2.2-6 4.1 12 2.2-6H21" />
+    </svg>
+  );
+}
+
 export function DriverIcon({ className = "size-4" }: IconProps) {
   return (
     <svg className={`${base} ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
